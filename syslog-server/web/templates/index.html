@@ -894,14 +894,21 @@
                     <option value="">全部 IP</option>
                 </select>
             </div>
-            
+
             <div class="filter-group">
                 <label>应用名称</label>
                 <select id="filter-app-name">
                     <option value="">全部应用</option>
                 </select>
             </div>
-            
+
+            <div class="filter-group">
+                <label>设备厂商</label>
+                <select id="filter-vendor">
+                    <option value="">全部厂商</option>
+                </select>
+            </div>
+
             <div class="filter-group">
                 <label>开始时间</label>
                 <input type="datetime-local" id="filter-start-time">
@@ -956,6 +963,7 @@
                                 <th style="width:140px;">时间</th>
                                 <th style="width:70px;">级别</th>
                                 <th style="width:100px;">设施</th>
+                                <th style="width:120px;">厂商</th>
                                 <th style="width:120px;">主机</th>
                                 <th style="width:120px;">应用</th>
                                 <th>消息</th>
@@ -1025,6 +1033,16 @@
                         <h4>📱 应用分布 Top 10</h4>
                         <div class="chart-container">
                             <div class="bar-chart" id="app-bar">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-row">
+                    <div class="chart-card" style="width:100%;">
+                        <h4>🏷️ 厂商分布 Top 10</h4>
+                        <div class="chart-container">
+                            <div class="bar-chart" id="vendor-bar">
                             </div>
                         </div>
                     </div>
@@ -1136,6 +1154,7 @@
         let facilities = {};
         let severities = {};
         let severityColors = {};
+        let vendors = {};
         let sortOrder = 'desc';
         let sortColumn = 'timestamp';
         
@@ -1179,24 +1198,34 @@
         
         async function loadFilterOptions() {
             try {
-                const [hosts, ips, apps] = await Promise.all([
+                const [hosts, ips, apps, vendorList, config] = await Promise.all([
                     fetch('/api/values/hostname').then(r => r.json()),
                     fetch('/api/values/source_ip').then(r => r.json()),
-                    fetch('/api/values/app_name').then(r => r.json())
+                    fetch('/api/values/app_name').then(r => r.json()),
+                    fetch('/api/values/vendor').then(r => r.json()),
+                    fetch('/api/config').then(r => r.json())
                 ]);
-                
+
+                // 更新厂商配置
+                if (config.vendors) {
+                    vendors = config.vendors;
+                }
+
                 const hostSelect = document.getElementById('filter-hostname');
                 const ipSelect = document.getElementById('filter-source-ip');
                 const appSelect = document.getElementById('filter-app-name');
-                
+                const vendorSelect = document.getElementById('filter-vendor');
+
                 const currentHost = hostSelect.value;
                 const currentIp = ipSelect.value;
                 const currentApp = appSelect.value;
-                
+                const currentVendor = vendorSelect.value;
+
                 hostSelect.innerHTML = '<option value="">全部主机</option>';
                 ipSelect.innerHTML = '<option value="">全部 IP</option>';
                 appSelect.innerHTML = '<option value="">全部应用</option>';
-                
+                vendorSelect.innerHTML = '<option value="">全部厂商</option>';
+
                 hosts.forEach(h => {
                     const opt = document.createElement('option');
                     opt.value = h;
@@ -1217,10 +1246,19 @@
                     opt.textContent = a;
                     appSelect.appendChild(opt);
                 });
-                
+
+                vendorList.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v;
+                    const vendorInfo = vendors[v] || {};
+                    opt.textContent = (vendorInfo.icon || '') + ' ' + (vendorInfo.name || v);
+                    vendorSelect.appendChild(opt);
+                });
+
                 hostSelect.value = currentHost;
                 ipSelect.value = currentIp;
                 appSelect.value = currentApp;
+                vendorSelect.value = currentVendor;
             } catch (e) {
                 console.error('Failed to load filter options:', e);
             }
@@ -1250,8 +1288,9 @@
                 hostname: document.getElementById('filter-hostname').value || null,
                 source_ip: document.getElementById('filter-source-ip').value || null,
                 app_name: document.getElementById('filter-app-name').value || null,
+                vendor: document.getElementById('filter-vendor').value || null,
                 search: document.getElementById('filter-search').value || null,
-                start_time: document.getElementById('filter-start-time').value ? 
+                start_time: document.getElementById('filter-start-time').value ?
                     document.getElementById('filter-start-time').value.replace('T', ' ') + ':00' : null,
                 end_time: document.getElementById('filter-end-time').value ?
                     document.getElementById('filter-end-time').value.replace('T', ' ') + ':00' : null
@@ -1288,11 +1327,11 @@
         
         function renderLogs(logs) {
             const tbody = document.getElementById('log-tbody');
-            
+
             if (logs.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="7">
+                        <td colspan="8">
                             <div class="empty-state">
                                 <div class="icon">📭</div>
                                 <div class="text">暂无日志数据</div>
@@ -1303,18 +1342,22 @@
                 `;
                 return;
             }
-            
-            tbody.innerHTML = logs.map(log => `
+
+            tbody.innerHTML = logs.map(log => {
+                const vendorInfo = vendors[log.vendor] || {};
+                const vendorDisplay = (vendorInfo.icon || '❓') + ' ' + (log.vendor_name || '其他');
+                return `
                 <tr onclick="showDetail(${log.id})" style="cursor:pointer;">
                     <td style="color:#9ca3af;">#${log.id}</td>
                     <td class="time-cell">${log.timestamp}</td>
                     <td><span class="severity-badge sev-${log.severity}">${getSeverityName(log.severity)}</span></td>
                     <td class="facility-cell">${log.facility_str}</td>
+                    <td class="vendor-cell" style="color:${vendorInfo.color || '#888'}">${vendorDisplay}</td>
                     <td class="host-cell">${escapeHtml(log.hostname || '-')}</td>
                     <td class="app-cell">${escapeHtml(log.app_name || '-')}</td>
                     <td class="msg-cell" title="${escapeHtml(log.message)}">${escapeHtml(log.message)}</td>
                 </tr>
-            `).join('');
+            `}).join('');
         }
         
         function renderPagination() {
@@ -1383,6 +1426,7 @@
             document.getElementById('filter-hostname').value = '';
             document.getElementById('filter-source-ip').value = '';
             document.getElementById('filter-app-name').value = '';
+            document.getElementById('filter-vendor').value = '';
             document.getElementById('filter-search').value = '';
             document.getElementById('filter-start-time').value = '';
             document.getElementById('filter-end-time').value = '';
@@ -1399,9 +1443,12 @@
             try {
                 const res = await fetch(`/api/logs/${logId}`);
                 const log = await res.json();
-                
+
                 if (!log) return;
-                
+
+                const vendorInfo = vendors[log.vendor] || {};
+                const vendorDisplay = (vendorInfo.icon || '❓') + ' ' + (log.vendor_name || '其他');
+
                 document.getElementById('detail-body').innerHTML = `
                     <div class="detail-section">
                         <h4>基本信息</h4>
@@ -1418,7 +1465,7 @@
                             <span class="detail-value">${log.timestamp}</span>
                         </div>
                     </div>
-                    
+
                     <div class="detail-section">
                         <h4>级别与设施</h4>
                         <div class="detail-field">
@@ -1431,8 +1478,12 @@
                             <span class="detail-label">设施</span>
                             <span class="detail-value">${log.facility_str} (${log.facility})</span>
                         </div>
+                        <div class="detail-field">
+                            <span class="detail-label">设备厂商</span>
+                            <span class="detail-value" style="color:${vendorInfo.color || '#888'}">${vendorDisplay}</span>
+                        </div>
                     </div>
-                    
+
                     <div class="detail-section">
                         <h4>来源信息</h4>
                         <div class="detail-field">
@@ -1452,7 +1503,7 @@
                             <span class="detail-value">${escapeHtml(log.proc_id || '-')}</span>
                         </div>
                     </div>
-                    
+
                     <div class="detail-section">
                         <h4>消息内容</h4>
                         <div class="detail-field">
@@ -1460,13 +1511,13 @@
                             <span class="detail-value" style="word-break:break-all;">${escapeHtml(log.message)}</span>
                         </div>
                     </div>
-                    
+
                     <div class="detail-section">
                         <h4>原始消息</h4>
                         <div class="raw-message">${escapeHtml(log.raw_message)}</div>
                     </div>
                 `;
-                
+
                 document.getElementById('detail-panel').classList.add('open');
             } catch (e) {
                 console.error('Failed to load log detail:', e);
@@ -1553,6 +1604,7 @@
             renderFacilityBar(stats.facility_stats || []);
             renderHostBar(stats.host_stats || []);
             renderAppBar(stats.app_stats || []);
+            renderVendorBar(stats.vendor_stats || []);
             renderTimeline(stats.timeline_data || {});
         }
         
@@ -1660,14 +1712,14 @@
         
         function renderAppBar(data) {
             const container = document.getElementById('app-bar');
-            
+
             if (data.length === 0) {
                 container.innerHTML = '<div class="empty-state" style="width:100%; padding:40px 0;"><div class="icon">📊</div><div class="text">暂无数据</div></div>';
                 return;
             }
-            
+
             const max = Math.max(...data.map(d => d.count));
-            
+
             container.innerHTML = data.map((item, i) => {
                 const height = (item.count / max) * 100;
                 const name = item.app_name.length > 10 ? item.app_name.substring(0, 10) + '...' : item.app_name;
@@ -1679,7 +1731,32 @@
                 `;
             }).join('');
         }
-        
+
+        function renderVendorBar(data) {
+            const container = document.getElementById('vendor-bar');
+
+            if (data.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="width:100%; padding:40px 0;"><div class="icon">📊</div><div class="text">暂无数据</div></div>';
+                return;
+            }
+
+            const max = Math.max(...data.map(d => d.count));
+
+            container.innerHTML = data.map((item, i) => {
+                const height = (item.count / max) * 100;
+                const vendorInfo = vendors[item.vendor] || {};
+                const color = vendorInfo.color || pieColors[i % pieColors.length];
+                const icon = vendorInfo.icon || '❓';
+                const name = (icon + ' ' + item.vendor_name).substring(0, 15);
+                return `
+                    <div class="bar" title="${item.vendor_name}: ${item.count}">
+                        <div class="bar-fill" style="height:${Math.max(height, 2)}%; background:${color};"></div>
+                        <div class="bar-label">${name}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function renderTimeline(timelineData) {
             const container = document.getElementById('timeline-chart');
             const hours = Object.keys(timelineData).sort();

@@ -50,7 +50,9 @@ class Database:
                 app_name TEXT,
                 proc_id TEXT,
                 message TEXT,
-                raw_message TEXT
+                raw_message TEXT,
+                vendor TEXT,
+                vendor_name TEXT
             )
         ''')
         
@@ -60,6 +62,7 @@ class Database:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_hostname ON syslogs(hostname)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_source_ip ON syslogs(source_ip)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_app_name ON syslogs(app_name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_vendor ON syslogs(vendor)')
         
         conn.commit()
     
@@ -70,8 +73,8 @@ class Database:
             INSERT INTO syslogs (
                 received_at, timestamp, facility, facility_str, severity,
                 severity_str, hostname, source_ip, app_name, proc_id,
-                message, raw_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                message, raw_message, vendor, vendor_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             log_data['received_at'],
             log_data['timestamp'],
@@ -84,11 +87,13 @@ class Database:
             log_data['app_name'],
             log_data['proc_id'],
             log_data['message'],
-            log_data['raw_message']
+            log_data['raw_message'],
+            log_data.get('vendor', 'other'),
+            log_data.get('vendor_name', '其他')
         ))
         conn.commit()
         return cursor.lastrowid
-    
+
     def insert_many_logs(self, logs_list):
         if not logs_list:
             return
@@ -98,8 +103,8 @@ class Database:
             INSERT INTO syslogs (
                 received_at, timestamp, facility, facility_str, severity,
                 severity_str, hostname, source_ip, app_name, proc_id,
-                message, raw_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                message, raw_message, vendor, vendor_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', [(
             log['received_at'],
             log['timestamp'],
@@ -112,48 +117,54 @@ class Database:
             log['app_name'],
             log['proc_id'],
             log['message'],
-            log['raw_message']
+            log['raw_message'],
+            log.get('vendor', 'other'),
+            log.get('vendor_name', '其他')
         ) for log in logs_list])
         conn.commit()
     
     def get_logs(self, page=1, per_page=50, severity=None, facility=None,
-                 hostname=None, source_ip=None, app_name=None,
+                 hostname=None, source_ip=None, app_name=None, vendor=None,
                  search=None, start_time=None, end_time=None,
                  order='desc'):
         conn = self._get_conn()
         cursor = conn.cursor()
-        
+
         query = 'SELECT * FROM syslogs WHERE 1=1'
         params = []
-        
+
         if severity is not None:
             query += ' AND severity = ?'
             params.append(severity)
-        
+
         if facility is not None:
             query += ' AND facility = ?'
             params.append(facility)
-        
+
         if hostname:
             query += ' AND hostname LIKE ?'
             params.append(f'%{hostname}%')
-        
+
         if source_ip:
             query += ' AND source_ip LIKE ?'
             params.append(f'%{source_ip}%')
-        
+
         if app_name:
             query += ' AND app_name LIKE ?'
             params.append(f'%{app_name}%')
-        
+
+        if vendor:
+            query += ' AND vendor = ?'
+            params.append(vendor)
+
         if search:
             query += ' AND (message LIKE ? OR raw_message LIKE ?)'
             params.extend([f'%{search}%', f'%{search}%'])
-        
+
         if start_time:
             query += ' AND timestamp >= ?'
             params.append(start_time)
-        
+
         if end_time:
             query += ' AND timestamp <= ?'
             params.append(end_time)
@@ -230,7 +241,17 @@ class Database:
             LIMIT 10
         ''', (since,))
         app_stats = [dict(row) for row in cursor.fetchall()]
-        
+
+        cursor.execute('''
+            SELECT vendor, vendor_name, COUNT(*) as count
+            FROM syslogs
+            WHERE timestamp >= ? AND vendor IS NOT NULL AND vendor != ''
+            GROUP BY vendor, vendor_name
+            ORDER BY count DESC
+            LIMIT 10
+        ''', (since,))
+        vendor_stats = [dict(row) for row in cursor.fetchall()]
+
         cursor.execute('SELECT COUNT(*) as count FROM syslogs WHERE timestamp >= ?', (since,))
         total = cursor.fetchone()['count']
         
@@ -261,6 +282,7 @@ class Database:
             'facility_stats': facility_stats,
             'host_stats': host_stats,
             'app_stats': app_stats,
+            'vendor_stats': vendor_stats,
             'timeline_data': timeline_data,
             'hours': hours
         }
@@ -277,7 +299,7 @@ class Database:
         return [dict(row) for row in rows]
     
     def get_distinct_values(self, column):
-        valid_columns = ['hostname', 'source_ip', 'app_name', 'facility_str', 'severity_str']
+        valid_columns = ['hostname', 'source_ip', 'app_name', 'facility_str', 'severity_str', 'vendor', 'vendor_name']
         if column not in valid_columns:
             return []
         

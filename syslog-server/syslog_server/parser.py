@@ -2,6 +2,7 @@ import re
 import time
 from datetime import datetime
 from config import Config
+from syslog_server.vendor_detector import detect_vendor
 
 RFC5424_REGEX = re.compile(
     r'^<(\d{1,3})>(\d+)\s+'
@@ -100,7 +101,10 @@ def parse_syslog_message(message, source_ip):
     
     facility_str = Config.FACILITY_MAP.get(facility, f'facility-{facility}')
     severity_str = Config.SEVERITY_MAP.get(severity, f'severity-{severity}')
-    
+
+    # 厂商识别
+    vendor_id, vendor_info = detect_vendor(msg, hostname, app_name)
+
     return {
         'received_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S'),
@@ -113,5 +117,7 @@ def parse_syslog_message(message, source_ip):
         'app_name': app_name or '',
         'proc_id': proc_id or '',
         'message': msg,
-        'raw_message': message
+        'raw_message': message,
+        'vendor': vendor_id,
+        'vendor_name': vendor_info['name']
     }

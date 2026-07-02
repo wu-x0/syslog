@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, render_template, Response
 from database.db import Database
 from config import Config
+from syslog_server.vendor_detector import get_detector
 import json
 import time
 from datetime import datetime
@@ -30,11 +31,12 @@ def get_logs():
     hostname = request.args.get('hostname')
     source_ip = request.args.get('source_ip')
     app_name = request.args.get('app_name')
+    vendor = request.args.get('vendor')
     search = request.args.get('search')
     start_time = request.args.get('start_time')
     end_time = request.args.get('end_time')
     order = request.args.get('order', 'desc')
-    
+
     result = db.get_logs(
         page=page,
         per_page=per_page,
@@ -43,12 +45,13 @@ def get_logs():
         hostname=hostname,
         source_ip=source_ip,
         app_name=app_name,
+        vendor=vendor,
         search=search,
         start_time=start_time,
         end_time=end_time,
         order=order
     )
-    
+
     return jsonify(result)
 
 @api_bp.route('/api/logs/<int:log_id>', methods=['GET'])
@@ -173,11 +176,15 @@ def send_test():
 
 @api_bp.route('/api/config', methods=['GET'])
 def get_config():
+    detector = get_detector()
+    vendors = detector.get_all_vendors()
+    vendor_list = {k: {'name': v['name'], 'icon': v['icon'], 'color': v['color']} for k, v in vendors.items()}
     return jsonify({
         'udp_port': Config.SYSLOG_UDP_PORT,
         'tcp_port': Config.SYSLOG_TCP_PORT,
         'web_port': Config.WEB_PORT,
         'facilities': Config.FACILITY_MAP,
         'severities': Config.SEVERITY_MAP,
-        'severity_colors': Config.SEVERITY_COLORS
+        'severity_colors': Config.SEVERITY_COLORS,
+        'vendors': vendor_list
     })
