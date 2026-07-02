@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syslog 日志服务器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        
+        .header h1 {
+            font-size: 22px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .header .logo {
+            width: 32px;
+            height: 32px;
+            background: #e94560;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .main-container {
+            display: flex;
+            height: calc(100vh - 64px);
+        }
+        
+        .sidebar {
+            width: 280px;
+            background: white;
+            border-right: 1px solid #e5e7eb;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .sidebar h3 {
+            font-size: 14px;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            margin-top: 20px;
+        }
+        
+        .sidebar h3:first-child {
+            margin-top: 0;
+        }
+        
+        .filter-group {
+            margin-bottom: 16px;
+        }
+        
+        .filter-group label {
+            display: block;
+            font-size: 13px;
+            color: #4b5563;
+            margin-bottom: 6px;
+        }
+        
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .filter-group select:focus,
+        .filter-group input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+        
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .tabs {
+            display: flex;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 0 20px;
+        }
+        
+        .tab {
+            padding: 14px 20px;
+            font-size: 14px;
+            color: #6b7280;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        
+        .tab:hover {
+            color: #3b82f6;
+        }
+        
+        .tab.active {
+            color: #3b82f6;
+            border-bottom-color: #3b82f6;
+        }
+        
+        .tab-content {
+            flex: 1;
+            overflow: hidden;
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            padding: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card .label {
+            font-size: 13px;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+        
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+        
+        .stat-card .trend {
+            font-size: 12px;
+            margin-top: 6px;
+            color: #10b981;
+        }
+        
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            padding: 0 20px 20px;
+        }
+        
+        .chart-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .chart-card h4 {
+            font-size: 15px;
+            color: #1f2937;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        
+        .chart-container {
+            height: 220px;
+            position: relative;
+        }
+        
+        .timeline-section {
+            padding: 0 20px 20px;
+        }
+        
+        .timeline-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .timeline-card h4 {
+            font-size: 15px;
+            color: #1f2937;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        
+        .timeline-chart {
+            height: 180px;
+            position: relative;
+        }
+        
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            height: 100%;
+            gap: 8px;
+            padding-bottom: 24px;
+            position: relative;
+        }
+        
+        .bar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            min-width: 0;
+            position: relative;
+        }
+        
+        .bar-fill {
+            width: 100%;
+            background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+            border-radius: 4px 4px 0 0;
+            min-height: 2px;
+            transition: height 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .bar-fill:hover {
+            opacity: 0.8;
+        }
+        
+        .bar-label {
+            position: absolute;
+            bottom: -20px;
+            font-size: 10px;
+            color: #9ca3af;
+            white-space: nowrap;
+            transform: rotate(-45deg);
+            transform-origin: top center;
+        }
+        
+        .pie-chart {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            height: 100%;
+        }
+        
+        .pie-svg {
+            width: 160px;
+            height: 160px;
+            flex-shrink: 0;
+        }
+        
+        .pie-legend {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            font-size: 12px;
+            color: #4b5563;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        
+        .legend-count {
+            margin-left: auto;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .severity-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .sev-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .sev-tag .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        
+        .sev-tag:hover {
+            transform: translateY(-1px);
+        }
+        
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+        }
+        
+        .search-box {
+            flex: 1;
+            max-width: 400px;
+            position: relative;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 8px 12px 8px 36px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .search-box input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            font-size: 14px;
+        }
+        
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .log-table-container {
+            flex: 1;
+            overflow: auto;
+            background: white;
+        }
+        
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        
+        .log-table th {
+            position: sticky;
+            top: 0;
+            background: #f9fafb;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .log-table th:hover {
+            background: #f3f4f6;
+        }
+        
+        .log-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f3f4f6;
+            vertical-align: top;
+        }
+        
+        .log-table tr:hover {
+            background: #f9fafb;
+        }
+        
+        .log-table tr.expanded td {
+            background: #f0f9ff;
+        }
+        
+        .severity-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .sev-0 { background: #fef2f2; color: #dc2626; }
+        .sev-1 { background: #fef2f2; color: #dc2626; }
+        .sev-2 { background: #fef2f2; color: #dc2626; }
+        .sev-3 { background: #fff7ed; color: #ea580c; }
+        .sev-4 { background: #fefce8; color: #ca8a04; }
+        .sev-5 { background: #ecfeff; color: #0891b2; }
+        .sev-6 { background: #f0fdf4; color: #16a34a; }
+        .sev-7 { background: #f3f4f6; color: #6b7280; }
+        
+        .msg-cell {
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        
+        .msg-cell:hover {
+            color: #3b82f6;
+        }
+        
+        .time-cell {
+            white-space: nowrap;
+            color: #6b7280;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 11px;
+        }
+        
+        .host-cell {
+            color: #2563eb;
+            font-weight: 500;
+        }
+        
+        .app-cell {
+            color: #7c3aed;
+        }
+        
+        .facility-cell {
+            color: #0891b2;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            font-size: 13px;
+            color: #6b7280;
+        }
+        
+        .pagination-controls {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        
+        .page-btn {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .page-btn:hover:not(:disabled) {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+        
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .page-btn.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        
+        .page-select {
+            padding: 6px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .detail-panel {
+            display: none;
+            position: fixed;
+            right: 0;
+            top: 64px;
+            bottom: 0;
+            width: 480px;
+            background: white;
+            border-left: 1px solid #e5e7eb;
+            box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+            z-index: 100;
+            overflow-y: auto;
+        }
+        
+        .detail-panel.open {
+            display: block;
+        }
+        
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 1;
+        }
+        
+        .detail-header h3 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .close-btn {
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: #f3f4f6;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: #6b7280;
+        }
+        
+        .close-btn:hover {
+            background: #e5e7eb;
+        }
+        
+        .detail-body {
+            padding: 20px;
+        }
+        
+        .detail-section {
+            margin-bottom: 24px;
+        }
+        
+        .detail-section h4 {
+            font-size: 13px;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+        
+        .detail-field {
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .detail-field:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            width: 100px;
+            flex-shrink: 0;
+            font-size: 13px;
+            color: #6b7280;
+        }
+        
+        .detail-value {
+            flex: 1;
+            font-size: 13px;
+            color: #1f2937;
+            word-break: break-all;
+        }
+        
+        .raw-message {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        .new-log-highlight {
+            animation: highlight 2s ease-out;
+        }
+        
+        @keyframes highlight {
+            0% { background: #fef3c7; }
+            100% { background: transparent; }
+        }
+        
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: #9ca3af;
+        }
+        
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        .empty-state .text {
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+        
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-overlay.open {
+            display: flex;
+        }
+        
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            min-width: 400px;
+            max-width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .modal h3 {
+            font-size: 18px;
+            margin-bottom: 16px;
+        }
+        
+        .modal-body {
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #4b5563;
+        }
+        
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        .stacked-bar {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            justify-content: flex-end;
+        }
+        
+        .stacked-segment {
+            width: 100%;
+            transition: height 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .stacked-segment:hover {
+            opacity: 0.8;
+        }
+        
+        .stats-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 20px 0;
+        }
+        
+        .time-range-select {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <div class="logo">📋</div>
+            Syslog 日志服务器
+        </h1>
+        <div class="header-right">
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span>服务运行中</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="sendTestLogs()">📤 发送测试日志</button>
+        </div>
+    </div>
+    
+    <div class="main-container">
+        <div class="sidebar">
+            <h3>🔍 筛选条件</h3>
+            
+            <div class="filter-group">
+                <label>关键词搜索</label>
+                <input type="text" id="filter-search" placeholder="输入关键词...">
+            </div>
+            
+            <div class="filter-group">
+                <label>严重级别</label>
+                <select id="filter-severity">
+                    <option value="">全部级别</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>设施 (Facility)</label>
+                <select id="filter-facility">
+                    <option value="">全部设施</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>主机名</label>
+                <select id="filter-hostname">
+                    <option value="">全部主机</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>来源 IP</label>
+                <select id="filter-source-ip">
+                    <option value="">全部 IP</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>应用名称</label>
+                <select id="filter-app-name">
+                    <option value="">全部应用</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>开始时间</label>
+                <input type="datetime-local" id="filter-start-time">
+            </div>
+            
+            <div class="filter-group">
+                <label>结束时间</label>
+                <input type="datetime-local" id="filter-end-time">
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn btn-primary" style="flex:1;" onclick="applyFilters()">应用筛选</button>
+                <button class="btn btn-secondary" onclick="resetFilters()">重置</button>
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn btn-danger" style="flex:1;" onclick="showClearModal()">🗑️ 清理日志</button>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('logs')">📋 日志列表</div>
+                <div class="tab" onclick="switchTab('dashboard')">📊 统计面板</div>
+                <div class="tab" onclick="switchTab('live')">📡 实时监控</div>
+            </div>
+            
+            <div class="tab-content active" id="tab-logs">
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <div class="search-box">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="quick-search" placeholder="快速搜索日志消息..." onkeyup="handleQuickSearch(event)">
+                        </div>
+                    </div>
+                    <div class="toolbar-right">
+                        <select id="per-page" class="page-select" onchange="changePerPage()">
+                            <option value="25">25 条/页</option>
+                            <option value="50" selected>50 条/页</option>
+                            <option value="100">100 条/页</option>
+                            <option value="200">200 条/页</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="refreshLogs()">🔄 刷新</button>
+                    </div>
+                </div>
+                
+                <div class="log-table-container">
+                    <table class="log-table" id="log-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;">ID</th>
+                                <th style="width:140px;">时间</th>
+                                <th style="width:70px;">级别</th>
+                                <th style="width:100px;">设施</th>
+                                <th style="width:120px;">主机</th>
+                                <th style="width:120px;">应用</th>
+                                <th>消息</th>
+                            </tr>
+                        </thead>
+                        <tbody id="log-tbody">
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="pagination">
+                    <div id="pagination-info">共 0 条日志</div>
+                    <div class="pagination-controls" id="pagination-controls">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="tab-dashboard">
+                <div class="stats-header">
+                    <h3 style="font-size:16px; color:#1f2937;">📊 日志统计概览</h3>
+                    <select class="time-range-select" id="stats-range" onchange="refreshStats()">
+                        <option value="1">最近 1 小时</option>
+                        <option value="6">最近 6 小时</option>
+                        <option value="24" selected>最近 24 小时</option>
+                        <option value="72">最近 3 天</option>
+                        <option value="168">最近 7 天</option>
+                    </select>
+                </div>
+                
+                <div class="stats-cards" id="stats-cards">
+                </div>
+                
+                <div class="timeline-section">
+                    <div class="timeline-card">
+                        <h4>📈 日志时间分布</h4>
+                        <div class="timeline-chart" id="timeline-chart">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h4>⚠️ 严重级别分布</h4>
+                        <div class="chart-container">
+                            <div class="pie-chart" id="severity-pie">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h4>🏭 设施分布 Top 10</h4>
+                        <div class="chart-container">
+                            <div class="bar-chart" id="facility-bar">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h4>🖥️ 主机分布 Top 10</h4>
+                        <div class="chart-container">
+                            <div class="bar-chart" id="host-bar">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h4>📱 应用分布 Top 10</h4>
+                        <div class="chart-container">
+                            <div class="bar-chart" id="app-bar">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="tab-live">
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <div class="live-indicator">
+                            <div class="live-dot"></div>
+                            <span id="live-status">实时监控中...</span>
+                        </div>
+                    </div>
+                    <div class="toolbar-right">
+                        <span id="live-count" style="font-size:13px; color:#6b7280;">已接收: 0 条</span>
+                        <button class="btn btn-secondary btn-sm" id="live-toggle" onclick="toggleLive()">⏸️ 暂停</button>
+                        <button class="btn btn-secondary btn-sm" onclick="clearLiveLogs()">🗑️ 清空</button>
+                    </div>
+                </div>
+                
+                <div class="log-table-container">
+                    <table class="log-table">
+                        <thead>
+                            <tr>
+                                <th style="width:140px;">接收时间</th>
+                                <th style="width:70px;">级别</th>
+                                <th style="width:100px;">设施</th>
+                                <th style="width:120px;">主机</th>
+                                <th style="width:120px;">应用</th>
+                                <th>消息</th>
+                            </tr>
+                        </thead>
+                        <tbody id="live-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="detail-panel" id="detail-panel">
+        <div class="detail-header">
+            <h3>日志详情</h3>
+            <button class="close-btn" onclick="closeDetail()">✕</button>
+        </div>
+        <div class="detail-body" id="detail-body">
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="clear-modal">
+        <div class="modal">
+            <h3>⚠️ 确认清理日志</h3>
+            <div class="modal-body">
+                <p style="margin-bottom:16px;">请选择清理方式：</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="clearLogs(7)">
+                        🗑️ 删除 7 天前的日志
+                    </button>
+                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="clearLogs(30)">
+                        🗑️ 删除 30 天前的日志
+                    </button>
+                    <button class="btn btn-danger" style="justify-content:flex-start; padding:12px 16px;" onclick="clearLogs(0)">
+                        💥 清空所有日志
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideClearModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let perPage = 50;
+        let totalLogs = 0;
+        let totalPages = 0;
+        let currentTab = 'logs';
+        let liveCount = 0;
+        let livePaused = false;
+        let eventSource = null;
+        let facilities = {};
+        let severities = {};
+        let severityColors = {};
+        let sortOrder = 'desc';
+        let sortColumn = 'timestamp';
+        
+        const sevColors = [
+            '#dc2626', '#dc2626', '#dc2626',
+            '#ea580c', '#ca8a04', '#0891b2',
+            '#16a34a', '#6b7280'
+        ];
+        
+        const pieColors = [
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+            '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+        ];
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initFilters();
+            loadLogs();
+            loadStats();
+            startLiveStream();
+            loadFilterOptions();
+        });
+        
+        function initFilters() {
+            const sevSelect = document.getElementById('filter-severity');
+            const facSelect = document.getElementById('filter-facility');
+            
+            for (let i = 0; i <= 7; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = getSeverityName(i);
+                sevSelect.appendChild(opt);
+            }
+            
+            for (let i = 0; i <= 23; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = getFacilityName(i);
+                facSelect.appendChild(opt);
+            }
+        }
+        
+        async function loadFilterOptions() {
+            try {
+                const [hosts, ips, apps] = await Promise.all([
+                    fetch('/api/values/hostname').then(r => r.json()),
+                    fetch('/api/values/source_ip').then(r => r.json()),
+                    fetch('/api/values/app_name').then(r => r.json())
+                ]);
+                
+                const hostSelect = document.getElementById('filter-hostname');
+                const ipSelect = document.getElementById('filter-source-ip');
+                const appSelect = document.getElementById('filter-app-name');
+                
+                const currentHost = hostSelect.value;
+                const currentIp = ipSelect.value;
+                const currentApp = appSelect.value;
+                
+                hostSelect.innerHTML = '<option value="">全部主机</option>';
+                ipSelect.innerHTML = '<option value="">全部 IP</option>';
+                appSelect.innerHTML = '<option value="">全部应用</option>';
+                
+                hosts.forEach(h => {
+                    const opt = document.createElement('option');
+                    opt.value = h;
+                    opt.textContent = h;
+                    hostSelect.appendChild(opt);
+                });
+                
+                ips.forEach(ip => {
+                    const opt = document.createElement('option');
+                    opt.value = ip;
+                    opt.textContent = ip;
+                    ipSelect.appendChild(opt);
+                });
+                
+                apps.forEach(a => {
+                    const opt = document.createElement('option');
+                    opt.value = a;
+                    opt.textContent = a;
+                    appSelect.appendChild(opt);
+                });
+                
+                hostSelect.value = currentHost;
+                ipSelect.value = currentIp;
+                appSelect.value = currentApp;
+            } catch (e) {
+                console.error('Failed to load filter options:', e);
+            }
+        }
+        
+        function getSeverityName(sev) {
+            const names = ['EMERG', 'ALERT', 'CRIT', 'ERR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG'];
+            return names[sev] || `SEV${sev}`;
+        }
+        
+        function getFacilityName(fac) {
+            const names = {
+                0: 'kern', 1: 'user', 2: 'mail', 3: 'daemon', 4: 'auth',
+                5: 'syslog', 6: 'lpr', 7: 'news', 8: 'uucp', 9: 'cron',
+                10: 'authpriv', 11: 'ftp', 12: 'ntp', 13: 'security',
+                14: 'console', 15: 'solaris-cron', 16: 'local0', 17: 'local1',
+                18: 'local2', 19: 'local3', 20: 'local4', 21: 'local5',
+                22: 'local6', 23: 'local7'
+            };
+            return names[fac] || `fac${fac}`;
+        }
+        
+        function getFilters() {
+            return {
+                severity: document.getElementById('filter-severity').value || null,
+                facility: document.getElementById('filter-facility').value || null,
+                hostname: document.getElementById('filter-hostname').value || null,
+                source_ip: document.getElementById('filter-source-ip').value || null,
+                app_name: document.getElementById('filter-app-name').value || null,
+                search: document.getElementById('filter-search').value || null,
+                start_time: document.getElementById('filter-start-time').value ? 
+                    document.getElementById('filter-start-time').value.replace('T', ' ') + ':00' : null,
+                end_time: document.getElementById('filter-end-time').value ?
+                    document.getElementById('filter-end-time').value.replace('T', ' ') + ':00' : null
+            };
+        }
+        
+        async function loadLogs() {
+            const filters = getFilters();
+            const params = new URLSearchParams({
+                page: currentPage,
+                per_page: perPage,
+                order: sortOrder
+            });
+            
+            for (const [key, val] of Object.entries(filters)) {
+                if (val !== null && val !== '') {
+                    params.set(key, val);
+                }
+            }
+            
+            try {
+                const res = await fetch(`/api/logs?${params}`);
+                const data = await res.json();
+                
+                totalLogs = data.total;
+                totalPages = data.total_pages;
+                renderLogs(data.logs);
+                renderPagination();
+                loadFilterOptions();
+            } catch (e) {
+                console.error('Failed to load logs:', e);
+            }
+        }
+        
+        function renderLogs(logs) {
+            const tbody = document.getElementById('log-tbody');
+            
+            if (logs.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <div class="icon">📭</div>
+                                <div class="text">暂无日志数据</div>
+                                <button class="btn btn-primary btn-sm" onclick="sendTestLogs()">发送测试日志</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = logs.map(log => `
+                <tr onclick="showDetail(${log.id})" style="cursor:pointer;">
+                    <td style="color:#9ca3af;">#${log.id}</td>
+                    <td class="time-cell">${log.timestamp}</td>
+                    <td><span class="severity-badge sev-${log.severity}">${getSeverityName(log.severity)}</span></td>
+                    <td class="facility-cell">${log.facility_str}</td>
+                    <td class="host-cell">${escapeHtml(log.hostname || '-')}</td>
+                    <td class="app-cell">${escapeHtml(log.app_name || '-')}</td>
+                    <td class="msg-cell" title="${escapeHtml(log.message)}">${escapeHtml(log.message)}</td>
+                </tr>
+            `).join('');
+        }
+        
+        function renderPagination() {
+            document.getElementById('pagination-info').textContent = 
+                `共 ${totalLogs} 条日志，第 ${currentPage}/${totalPages || 1} 页`;
+            
+            const controls = document.getElementById('pagination-controls');
+            let html = '';
+            
+            html += `<button class="page-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})">上一页</button>`;
+            
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(totalPages, currentPage + 2);
+            
+            if (startPage > 1) {
+                html += `<button class="page-btn" onclick="goToPage(1)">1</button>`;
+                if (startPage > 2) {
+                    html += '<span style="padding:0 4px;">...</span>';
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+            }
+            
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    html += '<span style="padding:0 4px;">...</span>';
+                }
+                html += `<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+            }
+            
+            html += `<button class="page-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})">下一页</button>`;
+            
+            controls.innerHTML = html;
+        }
+        
+        function goToPage(page) {
+            if (page < 1 || page > totalPages || page === currentPage) return;
+            currentPage = page;
+            loadLogs();
+        }
+        
+        function changePerPage() {
+            perPage = parseInt(document.getElementById('per-page').value);
+            currentPage = 1;
+            loadLogs();
+        }
+        
+        function handleQuickSearch(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('filter-search').value = e.target.value;
+                currentPage = 1;
+                loadLogs();
+            }
+        }
+        
+        function applyFilters() {
+            currentPage = 1;
+            loadLogs();
+        }
+        
+        function resetFilters() {
+            document.getElementById('filter-severity').value = '';
+            document.getElementById('filter-facility').value = '';
+            document.getElementById('filter-hostname').value = '';
+            document.getElementById('filter-source-ip').value = '';
+            document.getElementById('filter-app-name').value = '';
+            document.getElementById('filter-search').value = '';
+            document.getElementById('filter-start-time').value = '';
+            document.getElementById('filter-end-time').value = '';
+            document.getElementById('quick-search').value = '';
+            currentPage = 1;
+            loadLogs();
+        }
+        
+        function refreshLogs() {
+            loadLogs();
+        }
+        
+        async function showDetail(logId) {
+            try {
+                const res = await fetch(`/api/logs/${logId}`);
+                const log = await res.json();
+                
+                if (!log) return;
+                
+                document.getElementById('detail-body').innerHTML = `
+                    <div class="detail-section">
+                        <h4>基本信息</h4>
+                        <div class="detail-field">
+                            <span class="detail-label">ID</span>
+                            <span class="detail-value">#${log.id}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-label">接收时间</span>
+                            <span class="detail-value">${log.received_at}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-label">日志时间</span>
+                            <span class="detail-value">${log.timestamp}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>级别与设施</h4>
+                        <div class="detail-field">
+                            <span class="detail-label">严重级别</span>
+                            <span class="detail-value">
+                                <span class="severity-badge sev-${log.severity}">${getSeverityName(log.severity)} (${log.severity})</span>
+                            </span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-label">设施</span>
+                            <span class="detail-value">${log.facility_str} (${log.facility})</span>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>来源信息</h4>
+                        <div class="detail-field">
+                            <span class="detail-label">主机名</span>
+                            <span class="detail-value">${escapeHtml(log.hostname || '-')}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-label">来源 IP</span>
+                            <span class="detail-value">${escapeHtml(log.source_ip || '-')}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-label">应用名称</span>
+                            <span class="detail-value">${escapeHtml(log.app_name || '-')}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-label">进程 ID</span>
+                            <span class="detail-value">${escapeHtml(log.proc_id || '-')}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>消息内容</h4>
+                        <div class="detail-field">
+                            <span class="detail-label">消息</span>
+                            <span class="detail-value" style="word-break:break-all;">${escapeHtml(log.message)}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>原始消息</h4>
+                        <div class="raw-message">${escapeHtml(log.raw_message)}</div>
+                    </div>
+                `;
+                
+                document.getElementById('detail-panel').classList.add('open');
+            } catch (e) {
+                console.error('Failed to load log detail:', e);
+            }
+        }
+        
+        function closeDetail() {
+            document.getElementById('detail-panel').classList.remove('open');
+        }
+        
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            
+            if (tab === 'dashboard') {
+                refreshStats();
+            }
+        }
+        
+        async function loadStats() {
+            await refreshStats();
+        }
+        
+        async function refreshStats() {
+            const hours = parseInt(document.getElementById('stats-range').value);
+            
+            try {
+                const res = await fetch(`/api/stats?hours=${hours}`);
+                const stats = await res.json();
+                renderStats(stats);
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+        
+        function renderStats(stats) {
+            const sevStats = stats.severity_stats || {};
+            
+            const emergCount = (sevStats[0] || 0) + (sevStats[1] || 0) + (sevStats[2] || 0);
+            const errCount = sevStats[3] || 0;
+            const warnCount = sevStats[4] || 0;
+            const infoCount = (sevStats[5] || 0) + (sevStats[6] || 0);
+            const debugCount = sevStats[7] || 0;
+            
+            document.getElementById('stats-cards').innerHTML = `
+                <div class="stat-card">
+                    <div class="label">日志总数</div>
+                    <div class="value">${stats.total.toLocaleString()}</div>
+                    <div class="trend">最近 ${stats.hours} 小时</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">严重/紧急</div>
+                    <div class="value" style="color:#dc2626;">${emergCount.toLocaleString()}</div>
+                    <div class="trend" style="color:#dc2626;">EMERG/ALERT/CRIT</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">错误</div>
+                    <div class="value" style="color:#ea580c;">${errCount.toLocaleString()}</div>
+                    <div class="trend" style="color:#ea580c;">ERROR</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">警告</div>
+                    <div class="value" style="color:#ca8a04;">${warnCount.toLocaleString()}</div>
+                    <div class="trend" style="color:#ca8a04;">WARNING</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">信息</div>
+                    <div class="value" style="color:#16a34a;">${infoCount.toLocaleString()}</div>
+                    <div class="trend" style="color:#16a34a;">NOTICE/INFO</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">调试</div>
+                    <div class="value" style="color:#6b7280;">${debugCount.toLocaleString()}</div>
+                    <div class="trend" style="color:#6b7280;">DEBUG</div>
+                </div>
+            `;
+            
+            renderSeverityPie(sevStats);
+            renderFacilityBar(stats.facility_stats || []);
+            renderHostBar(stats.host_stats || []);
+            renderAppBar(stats.app_stats || []);
+            renderTimeline(stats.timeline_data || {});
+        }
+        
+        function renderSeverityPie(sevStats) {
+            const container = document.getElementById('severity-pie');
+            
+            const data = [];
+            let total = 0;
+            for (let i = 0; i <= 7; i++) {
+                const count = sevStats[i] || 0;
+                data.push({ name: getSeverityName(i), count, color: sevColors[i] });
+                total += count;
+            }
+            
+            if (total === 0) {
+                container.innerHTML = '<div class="empty-state" style="width:100%; padding:40px 0;"><div class="icon">📊</div><div class="text">暂无数据</div></div>';
+                return;
+            }
+            
+            let svg = '<svg class="pie-svg" viewBox="0 0 100 100">';
+            let currentAngle = -90;
+            const cx = 50, cy = 50, r = 40;
+            
+            data.forEach(item => {
+                if (item.count === 0) return;
+                const angle = (item.count / total) * 360;
+                const endAngle = currentAngle + angle;
+                
+                const x1 = cx + r * Math.cos(currentAngle * Math.PI / 180);
+                const y1 = cy + r * Math.sin(currentAngle * Math.PI / 180);
+                const x2 = cx + r * Math.cos(endAngle * Math.PI / 180);
+                const y2 = cy + r * Math.sin(endAngle * Math.PI / 180);
+                
+                const largeArc = angle > 180 ? 1 : 0;
+                
+                svg += `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z" fill="${item.color}" />`;
+                currentAngle = endAngle;
+            });
+            
+            svg += `<circle cx="${cx}" cy="${cy}" r="22" fill="white" />`;
+            svg += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="12" font-weight="bold" fill="#1f2937">${total}</text>`;
+            svg += `<text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="8" fill="#6b7280">总数</text>`;
+            svg += '</svg>';
+            
+            let legend = '<div class="pie-legend">';
+            data.forEach(item => {
+                if (item.count === 0) return;
+                const pct = ((item.count / total) * 100).toFixed(1);
+                legend += `
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:${item.color}"></div>
+                        <span>${item.name}</span>
+                        <span class="legend-count">${item.count.toLocaleString()} (${pct}%)</span>
+                    </div>
+                `;
+            });
+            legend += '</div>';
+            
+            container.innerHTML = svg + legend;
+        }
+        
+        function renderFacilityBar(data) {
+            const container = document.getElementById('facility-bar');
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="width:100%; padding:40px 0;"><div class="icon">📊</div><div class="text">暂无数据</div></div>';
+                return;
+            }
+            
+            const max = Math.max(...data.map(d => d.count));
+            
+            container.innerHTML = data.map((item, i) => {
+                const height = (item.count / max) * 100;
+                const name = getFacilityName(item.facility);
+                return `
+                    <div class="bar" title="${name}: ${item.count}">
+                        <div class="bar-fill" style="height:${Math.max(height, 2)}%; background:${pieColors[i % pieColors.length]};"></div>
+                        <div class="bar-label">${name}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function renderHostBar(data) {
+            const container = document.getElementById('host-bar');
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="width:100%; padding:40px 0;"><div class="icon">📊</div><div class="text">暂无数据</div></div>';
+                return;
+            }
+            
+            const max = Math.max(...data.map(d => d.count));
+            
+            container.innerHTML = data.map((item, i) => {
+                const height = (item.count / max) * 100;
+                const name = item.hostname.length > 10 ? item.hostname.substring(0, 10) + '...' : item.hostname;
+                return `
+                    <div class="bar" title="${item.hostname}: ${item.count}">
+                        <div class="bar-fill" style="height:${Math.max(height, 2)}%; background:${pieColors[i % pieColors.length]};"></div>
+                        <div class="bar-label">${name}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function renderAppBar(data) {
+            const container = document.getElementById('app-bar');
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="width:100%; padding:40px 0;"><div class="icon">📊</div><div class="text">暂无数据</div></div>';
+                return;
+            }
+            
+            const max = Math.max(...data.map(d => d.count));
+            
+            container.innerHTML = data.map((item, i) => {
+                const height = (item.count / max) * 100;
+                const name = item.app_name.length > 10 ? item.app_name.substring(0, 10) + '...' : item.app_name;
+                return `
+                    <div class="bar" title="${item.app_name}: ${item.count}">
+                        <div class="bar-fill" style="height:${Math.max(height, 2)}%; background:${pieColors[i % pieColors.length]};"></div>
+                        <div class="bar-label">${name}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function renderTimeline(timelineData) {
+            const container = document.getElementById('timeline-chart');
+            const hours = Object.keys(timelineData).sort();
+            
+            if (hours.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="width:100%; padding:40px 0;"><div class="icon">📈</div><div class="text">暂无数据</div></div>';
+                return;
+            }
+            
+            const maxTotal = Math.max(...hours.map(h => timelineData[h].total || 0));
+            
+            let html = '<div class="bar-chart">';
+            
+            const displayHours = hours.length > 24 ? 
+                hours.filter((_, i) => i % Math.ceil(hours.length / 24) === 0) : hours;
+            
+            displayHours.forEach(hour => {
+                const data = timelineData[hour] || {};
+                const total = data.total || 0;
+                const heightPct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+                
+                let segments = '';
+                for (let i = 7; i >= 0; i--) {
+                    const count = data[i] || 0;
+                    if (count === 0) continue;
+                    const segPct = maxTotal > 0 ? (count / maxTotal) * 100 : 0;
+                    segments += `<div class="stacked-segment" style="height:${segPct}%; background:${sevColors[i]};" title="${getSeverityName(i)}: ${count}"></div>`;
+                }
+                
+                const label = hour.substring(11, 16);
+                
+                html += `
+                    <div class="bar" title="${hour}\n总计: ${total}">
+                        <div class="stacked-bar" style="height:${Math.max(heightPct, 2)}%;">
+                            ${segments}
+                        </div>
+                        <div class="bar-label">${label}</div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        function startLiveStream() {
+            if (typeof EventSource === 'undefined') {
+                document.getElementById('live-status').textContent = '浏览器不支持 SSE';
+                return;
+            }
+            
+            eventSource = new EventSource('/api/stream');
+            
+            eventSource.onmessage = function(e) {
+                if (livePaused) return;
+                
+                try {
+                    const log = JSON.parse(e.data);
+                    addLiveLog(log);
+                } catch (err) {
+                    console.error('Failed to parse live log:', err);
+                }
+            };
+            
+            eventSource.onerror = function() {
+                document.getElementById('live-status').textContent = '连接断开，重连中...';
+            };
+            
+            eventSource.onopen = function() {
+                document.getElementById('live-status').textContent = '实时监控中...';
+            };
+        }
+        
+        function addLiveLog(log) {
+            liveCount++;
+            document.getElementById('live-count').textContent = `已接收: ${liveCount} 条`;
+            
+            const tbody = document.getElementById('live-tbody');
+            const row = document.createElement('tr');
+            row.className = 'new-log-highlight';
+            row.style.cursor = 'pointer';
+            row.onclick = () => showDetail(log.id);
+            row.innerHTML = `
+                <td class="time-cell">${log.received_at}</td>
+                <td><span class="severity-badge sev-${log.severity}">${getSeverityName(log.severity)}</span></td>
+                <td class="facility-cell">${log.facility_str}</td>
+                <td class="host-cell">${escapeHtml(log.hostname || '-')}</td>
+                <td class="app-cell">${escapeHtml(log.app_name || '-')}</td>
+                <td class="msg-cell" title="${escapeHtml(log.message)}">${escapeHtml(log.message)}</td>
+            `;
+            
+            tbody.insertBefore(row, tbody.firstChild);
+            
+            while (tbody.children.length > 200) {
+                tbody.removeChild(tbody.lastChild);
+            }
+        }
+        
+        function toggleLive() {
+            livePaused = !livePaused;
+            const btn = document.getElementById('live-toggle');
+            const status = document.getElementById('live-status');
+            
+            if (livePaused) {
+                btn.textContent = '▶️ 继续';
+                status.textContent = '已暂停';
+            } else {
+                btn.textContent = '⏸️ 暂停';
+                status.textContent = '实时监控中...';
+            }
+        }
+        
+        function clearLiveLogs() {
+            document.getElementById('live-tbody').innerHTML = '';
+            liveCount = 0;
+            document.getElementById('live-count').textContent = '已接收: 0 条';
+        }
+        
+        async function sendTestLogs() {
+            const count = prompt('发送多少条测试日志？', '10');
+            if (!count) return;
+            
+            try {
+                const res = await fetch('/api/send-test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ count: parseInt(count) || 10 })
+                });
+                const data = await res.json();
+                alert(`已发送 ${data.sent} 条测试日志`);
+                loadLogs();
+                refreshStats();
+                loadFilterOptions();
+            } catch (e) {
+                alert('发送失败: ' + e.message);
+            }
+        }
+        
+        function showClearModal() {
+            document.getElementById('clear-modal').classList.add('open');
+        }
+        
+        function hideClearModal() {
+            document.getElementById('clear-modal').classList.remove('open');
+        }
+        
+        async function clearLogs(days) {
+            hideClearModal();
+            
+            let confirmMsg;
+            if (days === 0) {
+                confirmMsg = '确定要清空所有日志吗？此操作不可恢复！';
+            } else {
+                confirmMsg = `确定要删除 ${days} 天前的所有日志吗？`;
+            }
+            
+            if (!confirm(confirmMsg)) return;
+            
+            try {
+                const url = days === 0 ? '/api/logs' : `/api/logs?days=${days}`;
+                const res = await fetch(url, { method: 'DELETE' });
+                const data = await res.json();
+                alert('清理完成');
+                loadLogs();
+                refreshStats();
+                loadFilterOptions();
+            } catch (e) {
+                alert('清理失败: ' + e.message);
+            }
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
