@@ -110,10 +110,17 @@ def stream():
                 break
             except Exception:
                 time.sleep(1)
-    
-    response = Response(event_stream(), mimetype='text/event-stream')
-    response.headers['Cache-Control'] = 'no-cache'
-    response.headers['X-Accel-Buffering'] = 'no'
+
+    response = Response(
+        event_stream(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+            'Access-Control-Allow-Origin': '*'
+        }
+    )
     return response
 
 @api_bp.route('/api/send-test', methods=['POST'])

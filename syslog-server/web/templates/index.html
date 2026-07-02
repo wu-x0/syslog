@@ -1098,6 +1098,32 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="test-modal">
+        <div class="modal">
+            <h3>📤 发送测试日志</h3>
+            <div class="modal-body">
+                <p style="margin-bottom:16px;">选择要发送的测试日志数量：</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="sendTestLogsCount(1)">
+                        📝 发送 1 条日志
+                    </button>
+                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="sendTestLogsCount(10)">
+                        📝 发送 10 条日志
+                    </button>
+                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="sendTestLogsCount(50)">
+                        📝 发送 50 条日志
+                    </button>
+                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="sendTestLogsCount(100)">
+                        📝 发送 100 条日志
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideTestModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentPage = 1;
         let perPage = 50;
@@ -1803,15 +1829,21 @@
             document.getElementById('live-count').textContent = '已接收: 0 条';
         }
         
-        async function sendTestLogs() {
-            const count = prompt('发送多少条测试日志？', '10');
-            if (!count) return;
-            
+        function showTestModal() {
+            document.getElementById('test-modal').classList.add('open');
+        }
+
+        function hideTestModal() {
+            document.getElementById('test-modal').classList.remove('open');
+        }
+
+        async function sendTestLogsCount(count) {
+            hideTestModal();
             try {
                 const res = await fetch('/api/send-test', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ count: parseInt(count) || 10 })
+                    body: JSON.stringify({ count: count })
                 });
                 const data = await res.json();
                 alert(`已发送 ${data.sent} 条测试日志`);
@@ -1821,6 +1853,10 @@
             } catch (e) {
                 alert('发送失败: ' + e.message);
             }
+        }
+
+        async function sendTestLogs() {
+            showTestModal();
         }
         
         function showClearModal() {
