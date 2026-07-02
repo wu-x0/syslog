@@ -1699,9 +1699,13 @@
             container.innerHTML = html;
         }
         
+        let sseRetryCount = 0;
+        let pollInterval = null;
+        
         function startLiveStream() {
             if (typeof EventSource === 'undefined') {
                 document.getElementById('live-status').textContent = '浏览器不支持 SSE';
+                fallbackToPolling();
                 return;
             }
             
@@ -1709,6 +1713,7 @@
             
             eventSource.onmessage = function(e) {
                 if (livePaused) return;
+                if (e.data === 'heartbeat') return;
                 
                 try {
                     const log = JSON.parse(e.data);
@@ -1719,12 +1724,38 @@
             };
             
             eventSource.onerror = function() {
+                sseRetryCount++;
+                if (sseRetryCount > 4) {
+                    eventSource.close();
+                    document.getElementById('live-status').textContent = 'SSE不可用，已切换轮询模式';
+                    fallbackToPolling();
+                    return;
+                }
                 document.getElementById('live-status').textContent = '连接断开，重连中...';
             };
             
             eventSource.onopen = function() {
                 document.getElementById('live-status').textContent = '实时监控中...';
             };
+        }
+        
+        function fallbackToPolling() {
+            if (pollInterval) return;
+            let lastId = 0;
+            pollInterval = setInterval(async () => {
+                if (livePaused) return;
+                try {
+                    const res = await fetch('/api/recent?limit=10');
+                    const logs = await res.json();
+                    const newLogs = logs.filter(l => l.id > lastId);
+                    if (newLogs.length > 0) {
+                        lastId = newLogs[0].id;
+                        newLogs.reverse().forEach(addLiveLog);
+                    }
+                } catch (e) {
+                    // silently ignore
+                }
+            }, 3000);
         }
         
         function addLiveLog(log) {

@@ -89,6 +89,7 @@ def delete_logs():
 def stream():
     def event_stream():
         last_id = 0
+        heartbeat_count = 0
         while True:
             try:
                 logs = db.get_recent_logs(limit=50)
@@ -97,13 +98,23 @@ def stream():
                     last_id = new_logs[0]['id']
                     for log in reversed(new_logs):
                         yield f"data: {json.dumps(log)}\n\n"
+                else:
+                    heartbeat_count += 1
+                    if heartbeat_count >= 5:
+                        yield ":heartbeat\n\n"
+                        heartbeat_count = 0
                 time.sleep(1)
             except GeneratorExit:
                 break
-            except:
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                break
+            except Exception:
                 time.sleep(1)
     
-    return Response(event_stream(), mimetype='text/event-stream')
+    response = Response(event_stream(), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
 
 @api_bp.route('/api/send-test', methods=['POST'])
 def send_test():
