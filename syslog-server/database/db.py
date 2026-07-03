@@ -442,7 +442,15 @@ class Database:
         cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
         row = cursor.fetchone()
         if row and row['value'] is not None:
-            return row['value']
+            value = row['value']
+            if isinstance(default, bool):
+                return value.lower() == 'true'
+            if isinstance(default, int):
+                try:
+                    return int(value)
+                except ValueError:
+                    return default
+            return value
         return default
 
     def set_setting(self, key, value):

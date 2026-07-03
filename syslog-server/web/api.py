@@ -577,11 +577,22 @@ def stream():
 @login_required
 def get_settings():
     settings = db.get_all_settings()
-    ntp_servers = db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS))
-    admin_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD)
     return jsonify({
-        'ntp_servers': ntp_servers,
-        'admin_password': admin_password
+        'ntp_servers': db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS)),
+        'admin_password': db.get_setting('admin_password', Config.ADMIN_PASSWORD),
+        'syslog_host': db.get_setting('syslog_host', Config.SYSLOG_HOST),
+        'syslog_udp_port': int(db.get_setting('syslog_udp_port', Config.SYSLOG_UDP_PORT)),
+        'syslog_tcp_port': int(db.get_setting('syslog_tcp_port', Config.SYSLOG_TCP_PORT)),
+        'web_host': db.get_setting('web_host', Config.WEB_HOST),
+        'web_port': int(db.get_setting('web_port', Config.WEB_PORT)),
+        'alert_email_enabled': db.get_setting('alert_email_enabled', Config.ALERT_EMAIL_ENABLED),
+        'alert_email_smtp_server': db.get_setting('alert_email_smtp_server', Config.ALERT_EMAIL_SMTP_SERVER or ''),
+        'alert_email_smtp_port': int(db.get_setting('alert_email_smtp_port', Config.ALERT_EMAIL_SMTP_PORT)),
+        'alert_email_sender': db.get_setting('alert_email_sender', Config.ALERT_EMAIL_SENDER or ''),
+        'alert_email_recipient': db.get_setting('alert_email_recipient', Config.ALERT_EMAIL_RECIPIENT or ''),
+        'alert_email_username': db.get_setting('alert_email_username', Config.ALERT_EMAIL_USERNAME or ''),
+        'alert_email_password': db.get_setting('alert_email_password', Config.ALERT_EMAIL_PASSWORD or ''),
+        'alert_webhook_url': db.get_setting('alert_webhook_url', Config.ALERT_WEBHOOK_URL or '')
     })
 
 @api_bp.route('/api/settings', methods=['POST'])
@@ -594,6 +605,45 @@ def update_settings():
     
     if 'admin_password' in data:
         db.set_setting('admin_password', data['admin_password'])
+    
+    if 'syslog_host' in data:
+        db.set_setting('syslog_host', data['syslog_host'])
+    
+    if 'syslog_udp_port' in data:
+        db.set_setting('syslog_udp_port', data['syslog_udp_port'])
+    
+    if 'syslog_tcp_port' in data:
+        db.set_setting('syslog_tcp_port', data['syslog_tcp_port'])
+    
+    if 'web_host' in data:
+        db.set_setting('web_host', data['web_host'])
+    
+    if 'web_port' in data:
+        db.set_setting('web_port', data['web_port'])
+    
+    if 'alert_email_enabled' in data:
+        db.set_setting('alert_email_enabled', data['alert_email_enabled'])
+    
+    if 'alert_email_smtp_server' in data:
+        db.set_setting('alert_email_smtp_server', data['alert_email_smtp_server'])
+    
+    if 'alert_email_smtp_port' in data:
+        db.set_setting('alert_email_smtp_port', data['alert_email_smtp_port'])
+    
+    if 'alert_email_sender' in data:
+        db.set_setting('alert_email_sender', data['alert_email_sender'])
+    
+    if 'alert_email_recipient' in data:
+        db.set_setting('alert_email_recipient', data['alert_email_recipient'])
+    
+    if 'alert_email_username' in data:
+        db.set_setting('alert_email_username', data['alert_email_username'])
+    
+    if 'alert_email_password' in data:
+        db.set_setting('alert_email_password', data['alert_email_password'])
+    
+    if 'alert_webhook_url' in data:
+        db.set_setting('alert_webhook_url', data['alert_webhook_url'])
     
     return jsonify({'success': True})
 
@@ -663,6 +713,53 @@ def test_ntp():
         'success': overall_success,
         'results': results
     })
+
+@api_bp.route('/api/alert/test', methods=['POST'])
+@login_required
+def test_email():
+    data = request.get_json() or {}
+    
+    email_enabled = data.get('alert_email_enabled', False)
+    smtp_server = data.get('alert_email_smtp_server', '')
+    smtp_port = data.get('alert_email_smtp_port', 587)
+    sender = data.get('alert_email_sender', '')
+    recipient = data.get('alert_email_recipient', '')
+    username = data.get('alert_email_username', '')
+    password = data.get('alert_email_password', '')
+    
+    if not email_enabled:
+        return jsonify({'success': False, 'message': '邮件告警未启用'})
+    
+    if not smtp_server or not sender or not recipient:
+        return jsonify({'success': False, 'message': '请填写SMTP服务器、发件人和收件人'})
+    
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        msg = MIMEMultipart()
+        msg['From'] = sender
+        msg['To'] = recipient
+        msg['Subject'] = '[Syslog Server] 测试邮件'
+        
+        body = """
+        这是一封测试邮件，用于验证邮件告警配置是否正确。
+        
+        如果您收到此邮件，说明邮件告警功能已正确配置。
+        
+        Syslog Server
+        """
+        msg.attach(MIMEText(body, 'plain'))
+        
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(username, password)
+            server.send_message(msg)
+        
+        return jsonify({'success': True, 'message': '测试邮件发送成功'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
 
 @api_bp.route('/api/trusted-hosts', methods=['GET'])
 @login_required

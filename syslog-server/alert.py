@@ -5,11 +5,63 @@ from datetime import datetime
 from config import Config
 
 class AlertManager:
-    def __init__(self):
+    def __init__(self, db=None):
+        self.db = db
         self.running = False
         self.thread = None
         self.alert_history = []
         self.last_alerts = {}
+        if db:
+            self._load_config()
+    
+    def _load_config(self):
+        try:
+            self.webhook_url = self.db.get_setting('alert_webhook_url', Config.ALERT_WEBHOOK_URL or '')
+            self.email_enabled = bool(self.db.get_setting('alert_email_enabled', Config.ALERT_EMAIL_ENABLED))
+            self.email_smtp_server = self.db.get_setting('alert_email_smtp_server', Config.ALERT_EMAIL_SMTP_SERVER or '')
+            self.email_smtp_port = int(self.db.get_setting('alert_email_smtp_port', Config.ALERT_EMAIL_SMTP_PORT))
+            self.email_sender = self.db.get_setting('alert_email_sender', Config.ALERT_EMAIL_SENDER or '')
+            self.email_recipient = self.db.get_setting('alert_email_recipient', Config.ALERT_EMAIL_RECIPIENT or '')
+            self.email_username = self.db.get_setting('alert_email_username', Config.ALERT_EMAIL_USERNAME or '')
+            self.email_password = self.db.get_setting('alert_email_password', Config.ALERT_EMAIL_PASSWORD or '')
+        except Exception:
+            self.webhook_url = Config.ALERT_WEBHOOK_URL
+            self.email_enabled = Config.ALERT_EMAIL_ENABLED
+            self.email_smtp_server = Config.ALERT_EMAIL_SMTP_SERVER
+            self.email_smtp_port = Config.ALERT_EMAIL_SMTP_PORT
+            self.email_sender = Config.ALERT_EMAIL_SENDER
+            self.email_recipient = Config.ALERT_EMAIL_RECIPIENT
+            self.email_username = Config.ALERT_EMAIL_USERNAME
+            self.email_password = Config.ALERT_EMAIL_PASSWORD
+    
+    def get_webhook_url(self):
+        if self.db:
+            return self.db.get_setting('alert_webhook_url', Config.ALERT_WEBHOOK_URL or '')
+        return Config.ALERT_WEBHOOK_URL
+    
+    def is_email_enabled(self):
+        if self.db:
+            return bool(self.db.get_setting('alert_email_enabled', Config.ALERT_EMAIL_ENABLED))
+        return Config.ALERT_EMAIL_ENABLED
+    
+    def get_email_config(self):
+        if self.db:
+            return {
+                'smtp_server': self.db.get_setting('alert_email_smtp_server', Config.ALERT_EMAIL_SMTP_SERVER or ''),
+                'smtp_port': int(self.db.get_setting('alert_email_smtp_port', Config.ALERT_EMAIL_SMTP_PORT)),
+                'sender': self.db.get_setting('alert_email_sender', Config.ALERT_EMAIL_SENDER or ''),
+                'recipient': self.db.get_setting('alert_email_recipient', Config.ALERT_EMAIL_RECIPIENT or ''),
+                'username': self.db.get_setting('alert_email_username', Config.ALERT_EMAIL_USERNAME or ''),
+                'password': self.db.get_setting('alert_email_password', Config.ALERT_EMAIL_PASSWORD or '')
+            }
+        return {
+            'smtp_server': Config.ALERT_EMAIL_SMTP_SERVER,
+            'smtp_port': Config.ALERT_EMAIL_SMTP_PORT,
+            'sender': Config.ALERT_EMAIL_SENDER,
+            'recipient': Config.ALERT_EMAIL_RECIPIENT,
+            'username': Config.ALERT_EMAIL_USERNAME,
+            'password': Config.ALERT_EMAIL_PASSWORD
+        }
     
     def start(self):
         self.running = True
@@ -44,22 +96,24 @@ class AlertManager:
             self.alert_history = self.alert_history[-100:]
         
         sent = False
-        if Config.ALERT_WEBHOOK_URL:
-            sent |= self._send_webhook(alert)
+        webhook_url = self.get_webhook_url()
+        if webhook_url:
+            sent |= self._send_webhook(alert, webhook_url)
         
-        if Config.ALERT_EMAIL_ENABLED:
-            sent |= self._send_email(alert)
+        if self.is_email_enabled():
+            email_config = self.get_email_config()
+            sent |= self._send_email(alert, email_config)
         
         return sent
     
-    def _send_webhook(self, alert):
+    def _send_webhook(self, alert, webhook_url):
         try:
             payload = {
                 'alert': alert,
                 'timestamp': alert['timestamp']
             }
             response = requests.post(
-                Config.ALERT_WEBHOOK_URL,
+                webhook_url,
                 json=payload,
                 timeout=10
             )
@@ -68,15 +122,15 @@ class AlertManager:
             print(f"Webhook alert failed: {e}")
             return False
     
-    def _send_email(self, alert):
+    def _send_email(self, alert, email_config):
         try:
             import smtplib
             from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
             
             msg = MIMEMultipart()
-            msg['From'] = Config.ALERT_EMAIL_SENDER
-            msg['To'] = Config.ALERT_EMAIL_RECIPIENT
+            msg['From'] = email_config['sender']
+            msg['To'] = email_config['recipient']
             msg['Subject'] = f"[Syslog Server] {alert['level'].upper()} Alert: {alert['type']}"
             
             body = f"""
@@ -90,9 +144,9 @@ class AlertManager:
             """
             msg.attach(MIMEText(body, 'plain'))
             
-            with smtplib.SMTP(Config.ALERT_EMAIL_SMTP_SERVER, Config.ALERT_EMAIL_SMTP_PORT) as server:
+            with smtplib.SMTP(email_config['smtp_server'], email_config['smtp_port']) as server:
                 server.starttls()
-                server.login(Config.ALERT_EMAIL_USERNAME, Config.ALERT_EMAIL_PASSWORD)
+                server.login(email_config['username'], email_config['password'])
                 server.send_message(msg)
             
             return True
@@ -171,8 +225,8 @@ class AlertManager:
     def get_alert_info(self):
         return {
             'enabled': Config.ALERT_ENABLED,
-            'webhook_configured': Config.ALERT_WEBHOOK_URL is not None,
-            'email_configured': Config.ALERT_EMAIL_ENABLED,
+            'webhook_configured': self.get_webhook_url() != '',
+            'email_configured': self.is_email_enabled(),
             'rules': Config.ALERT_RULES,
             'recent_alerts': self.alert_history[-10:]
         }
@@ -191,7 +245,10 @@ def get_alert_manager():
         _alert_manager = AlertManager()
     return _alert_manager
 
-def start_alert():
+def start_alert(db=None):
     manager = get_alert_manager()
+    if db:
+        manager.db = db
+        manager._load_config()
     manager.start()
     return manager

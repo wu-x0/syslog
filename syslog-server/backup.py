@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from config import Config
 
 class BackupManager:
-    def __init__(self):
+    def __init__(self, db=None):
+        self.db = db
         self.backup_dir = Config.BACKUP_DIR
         self.interval_hours = Config.BACKUP_INTERVAL_HOURS
         self.retention_days = Config.BACKUP_RETENTION_DAYS
@@ -15,6 +16,15 @@ class BackupManager:
         self.last_backup_time = 0
         self.backup_count = 0
         os.makedirs(self.backup_dir, exist_ok=True)
+        if db:
+            self._load_config()
+    
+    def _load_config(self):
+        try:
+            self.interval_hours = int(self.db.get_setting('backup_interval_hours', Config.BACKUP_INTERVAL_HOURS))
+            self.retention_days = int(self.db.get_setting('backup_retention_days', Config.BACKUP_RETENTION_DAYS))
+        except Exception:
+            pass
     
     def start(self):
         self.running = True
@@ -105,7 +115,10 @@ def get_backup_manager():
         _backup_manager = BackupManager()
     return _backup_manager
 
-def start_backup():
+def start_backup(db=None):
     manager = get_backup_manager()
+    if db:
+        manager.db = db
+        manager._load_config()
     manager.start()
     return manager

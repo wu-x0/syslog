@@ -31,20 +31,26 @@ def main():
     
     db = Database(Config.DATABASE_PATH)
     
+    syslog_host = db.get_setting('syslog_host', Config.SYSLOG_HOST)
+    syslog_udp_port = int(db.get_setting('syslog_udp_port', Config.SYSLOG_UDP_PORT))
+    syslog_tcp_port = int(db.get_setting('syslog_tcp_port', Config.SYSLOG_TCP_PORT))
+    web_host = db.get_setting('web_host', Config.WEB_HOST)
+    web_port = int(db.get_setting('web_port', Config.WEB_PORT))
+    
     log_writer = LogWriter(log_queue, db)
     log_writer.start()
     
     udp_server = UDPSyslogServer(
-        Config.SYSLOG_HOST,
-        Config.SYSLOG_UDP_PORT,
+        syslog_host,
+        syslog_udp_port,
         log_queue
     )
     udp_server.db = db
     udp_server.start()
     
     tcp_server = TCPSyslogServer(
-        Config.SYSLOG_HOST,
-        Config.SYSLOG_TCP_PORT,
+        syslog_host,
+        syslog_tcp_port,
         log_queue
     )
     tcp_server.db = db
@@ -53,8 +59,8 @@ def main():
     init_api(db, log_queue)
     app.register_blueprint(api_bp)
     
-    start_backup()
-    start_alert()
+    start_backup(db=db)
+    start_alert(db=db)
     
     def signal_handler(sig, frame):
         print("\nShutting down...")
@@ -69,15 +75,15 @@ def main():
     print(f"\n{'='*50}")
     print("  Syslog 日志服务器已启动")
     print(f"{'='*50}")
-    print(f"  UDP 端口:  {Config.SYSLOG_UDP_PORT}")
-    print(f"  TCP 端口:  {Config.SYSLOG_TCP_PORT}")
-    print(f"  Web 界面:  http://{Config.WEB_HOST}:{Config.WEB_PORT}")
+    print(f"  UDP 端口:  {syslog_udp_port}")
+    print(f"  TCP 端口:  {syslog_tcp_port}")
+    print(f"  Web 界面:  http://{web_host}:{web_port}")
     print(f"  数据库:    {Config.DATABASE_PATH}")
     print(f"{'='*50}\n")
     
     app.run(
-        host=Config.WEB_HOST,
-        port=Config.WEB_PORT,
+        host=web_host,
+        port=web_port,
         debug=Config.DEBUG,
         use_reloader=False,
         threaded=True
