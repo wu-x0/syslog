@@ -1517,7 +1517,7 @@
                     <div class="settings-content" id="settings-interfaces">
                         <h3>🖧 物理接口</h3>
                         <div class="settings-section">
-                            <div class="setting-desc" style="margin-bottom:16px;">自动识别当前服务器的所有物理接口及其IP地址，可选择接口IP作为Syslog监听地址（修改后需重启服务生效）。</div>
+                            <div class="setting-desc" style="margin-bottom:16px;">自动识别当前服务器的所有物理接口及其IP地址。</div>
                             <table class="hosts-table" id="network-interfaces-table">
                                 <thead>
                                     <tr>
@@ -1526,11 +1526,10 @@
                                         <th>IPv4地址</th>
                                         <th>IPv6地址</th>
                                         <th>状态</th>
-                                        <th>操作</th>
                                     </tr>
                                 </thead>
                                 <tbody id="network-interfaces-body">
-                                    <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                                    <tr><td colspan="5" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -2866,14 +2865,14 @@
             } catch (e) {
                 console.error('Failed to load network interfaces:', e);
                 document.getElementById('network-interfaces-body').innerHTML = 
-                    '<tr><td colspan="6" style="text-align:center; padding:24px; color:#dc2626;">加载失败</td></tr>';
+                    '<tr><td colspan="5" style="text-align:center; padding:24px; color:#dc2626;">加载失败</td></tr>';
             }
         }
 
         function renderNetworkInterfaces(interfaces) {
             const tbody = document.getElementById('network-interfaces-body');
             if (interfaces.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">未检测到网络接口</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:24px; color:#9ca3af;">未检测到网络接口</td></tr>';
                 return;
             }
             
@@ -2883,10 +2882,6 @@
                 const statusClass = iface.status === 'up' ? 'badge-success' : 'badge-danger';
                 const statusText = iface.status === 'up' ? '运行中' : '未启用';
                 
-                const modifyButtons = iface.ipv4.map(ip => 
-                    `<button class="btn btn-primary btn-sm" onclick="setSyslogHost('${ip.address}')">修改</button>`
-                ).join('');
-                
                 return `
                     <tr>
                         <td><strong>${escapeHtml(iface.name)}</strong></td>
@@ -2894,18 +2889,9 @@
                         <td style="max-width:200px;">${ipv4List || '-'}</td>
                         <td style="max-width:200px;">${ipv6List || '-'}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
-                        <td>
-                            <div class="host-actions">${modifyButtons}</div>
-                        </td>
                     </tr>
                 `;
             }).join('');
-        }
-
-        function setSyslogHost(ipAddress) {
-            document.getElementById('syslog-host').value = ipAddress;
-            switchSettingsTab('network');
-            alert(`已将 Syslog 监听地址设置为 ${ipAddress}\n\n请点击"保存网络设置"按钮保存更改（需重启服务生效）`);
         }
 
         async function addIPToTrusted(ipAddress, interfaceName) {
