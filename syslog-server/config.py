@@ -15,7 +15,53 @@ class Config:
     
     LOG_QUEUE_MAXSIZE = 10000
     
-    MAX_LOG_AGE_DAYS = 30
+    MAX_LOG_AGE_DAYS = 180
+
+    NTP_SERVERS = ['pool.ntp.org', 'time.nist.gov']
+
+    BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
+    BACKUP_INTERVAL_HOURS = 24
+    BACKUP_RETENTION_DAYS = 30
+
+    AUTH_ENABLED = True
+    ADMIN_USERNAME = 'admin'
+    ADMIN_PASSWORD = 'syslog@2024'
+    SESSION_SECRET_KEY = 'syslog-server-secret-key-change-in-production'
+
+    ALERT_ENABLED = True
+    ALERT_WEBHOOK_URL = None
+    ALERT_EMAIL_ENABLED = False
+    ALERT_EMAIL_SMTP_SERVER = None
+    ALERT_EMAIL_SMTP_PORT = 587
+    ALERT_EMAIL_SENDER = None
+    ALERT_EMAIL_RECIPIENT = None
+    ALERT_EMAIL_USERNAME = None
+    ALERT_EMAIL_PASSWORD = None
+
+    ALERT_RULES = {
+        'high_severity': {
+            'name': '高严重性日志',
+            'enabled': True,
+            'severities': [0, 1, 2],
+            'threshold': 5,
+            'time_window_minutes': 5
+        },
+        'anomaly_rate': {
+            'name': '异常日志速率',
+            'enabled': True,
+            'threshold': 100,
+            'time_window_minutes': 1
+        },
+        'integrity_failure': {
+            'name': '日志完整性失败',
+            'enabled': True
+        },
+        'disk_space': {
+            'name': '磁盘空间告警',
+            'enabled': True,
+            'threshold_percent': 90
+        }
+    }
     
     FACILITY_MAP = {
         0: 'kern',

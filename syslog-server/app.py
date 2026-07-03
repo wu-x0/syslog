@@ -12,12 +12,15 @@ from syslog_server.udp_server import UDPSyslogServer
 from syslog_server.tcp_server import TCPSyslogServer
 from database.db import Database, LogWriter
 from web.api import api_bp, init_api
+from backup import start_backup
+from alert import start_alert
 
 def create_app():
     template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web', 'templates')
     
     app = Flask(__name__, template_folder=template_dir)
     app.config.from_object(Config)
+    app.secret_key = Config.SESSION_SECRET_KEY
     
     return app
 
@@ -47,6 +50,9 @@ def main():
     
     init_api(db, log_queue)
     app.register_blueprint(api_bp)
+    
+    start_backup()
+    start_alert()
     
     def signal_handler(sig, frame):
         print("\nShutting down...")

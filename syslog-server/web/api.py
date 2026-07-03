@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, render_template, Response
+from flask import Blueprint, jsonify, request, render_template, Response, session, redirect, url_for, abort
 from database.db import Database
 from config import Config
 from syslog_server.vendor_detector import get_detector
@@ -22,6 +22,16 @@ def init_api(database, queue):
     db = database
     log_queue = queue
     _start_rate_monitor()
+
+def login_required(f):
+    def wrapper(*args, **kwargs):
+        if not Config.AUTH_ENABLED:
+            return f(*args, **kwargs)
+        if 'logged_in' not in session or not session['logged_in']:
+            return redirect(url_for('api.login'))
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
 
 def record_log_received(count=1):
     global _total_received
@@ -62,11 +72,30 @@ def get_current_rate():
         return rate_1min, rate_5min, _total_received
 
 @api_bp.route('/')
+@login_required
 def index():
     return render_template('index.html',
                          facilities=Config.FACILITY_MAP,
                          severities=Config.SEVERITY_MAP,
                          severity_colors=Config.SEVERITY_COLORS)
+
+@api_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username == Config.ADMIN_USERNAME and password == Config.ADMIN_PASSWORD:
+            session['logged_in'] = True
+            session['username'] = username
+            return redirect(url_for('api.index'))
+        else:
+            return render_template('login.html', error='用户名或密码错误')
+    return render_template('login.html')
+
+@api_bp.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('api.login'))
 
 @api_bp.route('/api/logs', methods=['GET'])
 def get_logs():
@@ -158,14 +187,18 @@ def _get_storage_info():
     est_days_by_disk = 0
     max_days = Config.MAX_LOG_AGE_DAYS
 
-    if rate_per_day > 0 and avg_log_size > 0:
-        if total_logs > 0:
-            current_days_data = (db_size / (total_logs / max_days)) if max_days > 0 else 0
-        est_days_by_db = (free_space / avg_log_size) / rate_per_day if rate_per_day > 0 else 0
-        est_days_by_disk = (free_space / avg_log_size) / rate_per_day if rate_per_day > 0 else 0
-        est_days_by_db = min(est_days_by_db, max_days)
+    if avg_log_size > 0 and free_space > 0:
+        if rate_per_day > 0:
+            est_days_by_disk = (free_space / avg_log_size) / rate_per_day
+            est_days_by_db = min(est_days_by_disk, max_days)
+        elif total_logs > 0:
+            est_days_by_disk = (free_space / db_size) * max_days
+            est_days_by_db = min(est_days_by_disk, max_days)
+        else:
+            est_days_by_disk = (free_space / avg_log_size) / 10000
+            est_days_by_db = min(est_days_by_disk, max_days)
 
-    daily_growth_bytes = rate_per_day * avg_log_size
+    daily_growth_bytes = rate_per_day * avg_log_size if rate_per_day > 0 else avg_log_size * 10000
 
     return {
         'db_size_bytes': db_size,
@@ -214,50 +247,61 @@ def _check_compliance(stats, storage_info):
         'pass': True
     })
 
+    ntp_status = _check_ntp_sync()
     checks.append({
         'id': 'time_sync',
         'name': '时间同步',
         'requirement': '系统时间准确，日志时间戳可信',
-        'current': '使用系统本地时间',
-        'pass': True,
-        'warn': True
+        'current': ntp_status['message'],
+        'pass': ntp_status['pass'],
+        'warn': ntp_status.get('warn', False)
     })
+    if not ntp_status['pass']:
+        overall_pass = False
 
+    backup_status = _check_backup()
     checks.append({
         'id': 'backup',
         'name': '日志备份',
         'requirement': '审计记录定期备份，防止意外丢失',
-        'current': '当前未配置自动备份机制',
-        'pass': False
+        'current': backup_status['message'],
+        'pass': backup_status['pass']
     })
-    overall_pass = False
+    if not backup_status['pass']:
+        overall_pass = False
 
+    integrity_status = _check_integrity()
     checks.append({
         'id': 'integrity',
         'name': '日志完整性保护',
         'requirement': '防止日志被未授权删除或修改',
-        'current': '数据库文件可被修改，未启用完整性校验',
-        'pass': False
+        'current': integrity_status['message'],
+        'pass': integrity_status['pass']
     })
-    overall_pass = False
+    if not integrity_status['pass']:
+        overall_pass = False
 
+    access_status = _check_access_control()
     checks.append({
         'id': 'access_control',
         'name': '访问控制',
         'requirement': '仅授权人员可访问和操作日志',
-        'current': 'Web界面无身份认证',
-        'pass': False
+        'current': access_status['message'],
+        'pass': access_status['pass']
     })
-    overall_pass = False
+    if not access_status['pass']:
+        overall_pass = False
 
+    alert_status = _check_alert()
     checks.append({
         'id': 'alert',
         'name': '异常告警',
         'requirement': '对重要安全事件进行告警',
-        'current': '未配置安全事件告警规则',
-        'pass': False
+        'current': alert_status['message'],
+        'pass': alert_status['pass']
     })
-    overall_pass = False
+    if not alert_status['pass']:
+        overall_pass = False
 
     return {
         'level': '等保三级',
@@ -266,6 +310,164 @@ def _check_compliance(stats, storage_info):
         'pass_count': sum(1 for c in checks if c['pass']),
         'total_count': len(checks)
     }
+
+def _check_ntp_sync():
+    import socket
+    try:
+        import ntplib
+        client = ntplib.NTPClient()
+        for server in Config.NTP_SERVERS:
+            try:
+                response = client.request(server, version=4, timeout=3)
+                offset = abs(response.offset)
+                if offset < 1.0:
+                    return {
+                        'pass': True,
+                        'message': f'NTP同步正常（{server}，偏移 {offset:.3f} 秒）'
+                    }
+            except Exception:
+                continue
+        return {
+            'pass': False,
+            'message': 'NTP服务器不可达或偏移过大'
+        }
+    except ImportError:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['timedatectl', 'status'],
+                capture_output=True, text=True, timeout=5
+            )
+            if 'systemd-timesyncd' in result.stdout and 'synchronized: yes' in result.stdout:
+                return {
+                    'pass': True,
+                    'message': 'systemd-timesyncd时间同步正常'
+                }
+            if 'NTP synchronized: yes' in result.stdout:
+                return {
+                    'pass': True,
+                    'message': 'NTP时间同步正常'
+                }
+            return {
+                'pass': False,
+                'warn': True,
+                'message': '未检测到NTP同步（建议配置NTP服务）'
+            }
+        except Exception:
+            return {
+                'pass': False,
+                'warn': True,
+                'message': '无法检测NTP状态（建议配置NTP服务）'
+            }
+
+def _check_backup():
+    try:
+        from backup import get_backup_manager
+        manager = get_backup_manager()
+        info = manager.get_backup_info()
+        if info['enabled'] and info['backup_count'] > 0:
+            return {
+                'pass': True,
+                'message': f'自动备份已启用（间隔 {info["interval_hours"]} 小时，保留 {info["retention_days"]} 天，最近备份: {info["last_backup"]}）'
+            }
+        elif info['enabled']:
+            return {
+                'pass': True,
+                'warn': True,
+                'message': f'自动备份已配置（间隔 {info["interval_hours"]} 小时），等待首次备份'
+            }
+        else:
+            return {
+                'pass': False,
+                'message': '未配置自动备份机制'
+            }
+    except Exception as e:
+        return {
+            'pass': False,
+            'message': f'备份检查失败: {str(e)}'
+        }
+
+def _check_integrity():
+    try:
+        global db
+        if db is None:
+            return {
+                'pass': False,
+                'message': '数据库未连接'
+            }
+        
+        integrity = db.verify_integrity()
+        if integrity['valid']:
+            msg = f'日志完整性校验通过（共 {integrity["total_records"]} 条记录，0 条不匹配）'
+            if integrity.get('missing_checksum', 0) > 0:
+                msg += f'，{integrity["missing_checksum"]} 条旧记录无校验值'
+            return {
+                'pass': True,
+                'message': msg
+            }
+        else:
+            return {
+                'pass': False,
+                'message': f'日志完整性校验失败（{integrity["mismatches"]}/{integrity["total_records"]} 条记录不匹配，可能被篡改）'
+            }
+    except Exception as e:
+        return {
+            'pass': False,
+            'message': f'完整性检查失败: {str(e)}'
+        }
+
+def _check_access_control():
+    try:
+        if Config.AUTH_ENABLED:
+            return {
+                'pass': True,
+                'message': f'Web界面已启用身份认证（用户名: {Config.ADMIN_USERNAME}）'
+            }
+        else:
+            return {
+                'pass': False,
+                'message': 'Web界面未启用身份认证'
+            }
+    except Exception as e:
+        return {
+            'pass': False,
+            'message': f'访问控制检查失败: {str(e)}'
+        }
+
+def _check_alert():
+    try:
+        from alert import get_alert_manager
+        manager = get_alert_manager()
+        info = manager.get_alert_info()
+        
+        if info['enabled']:
+            configured_channels = []
+            if info['webhook_configured']:
+                configured_channels.append('Webhook')
+            if info['email_configured']:
+                configured_channels.append('Email')
+            
+            if configured_channels:
+                return {
+                    'pass': True,
+                    'message': f'异常告警已启用，告警渠道: {", ".join(configured_channels)}'
+                }
+            else:
+                return {
+                    'pass': True,
+                    'warn': True,
+                    'message': '异常告警已启用，但未配置告警渠道（建议配置Webhook或邮件）'
+                }
+        else:
+            return {
+                'pass': False,
+                'message': '异常告警未启用'
+            }
+    except Exception as e:
+        return {
+            'pass': False,
+            'message': f'告警检查失败: {str(e)}'
+        }
 
 @api_bp.route('/api/recent', methods=['GET'])
 def get_recent():

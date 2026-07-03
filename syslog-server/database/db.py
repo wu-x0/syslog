@@ -2,6 +2,7 @@ import sqlite3
 import threading
 import queue
 import time
+import hashlib
 from datetime import datetime, timedelta
 from config import Config
 
@@ -52,7 +53,17 @@ class Database:
                 message TEXT,
                 raw_message TEXT,
                 vendor TEXT,
-                vendor_name TEXT
+                vendor_name TEXT,
+                checksum TEXT
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS integrity_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_time TEXT NOT NULL,
+                total_records INTEGER NOT NULL,
+                total_hash TEXT NOT NULL
             )
         ''')
         
@@ -65,16 +76,21 @@ class Database:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_vendor ON syslogs(vendor)')
         
         conn.commit()
+
+    def _compute_checksum(self, log_data):
+        data_str = f"{log_data.get('id', '')}|{log_data.get('received_at', '')}|{log_data.get('timestamp', '')}|{log_data.get('facility', '')}|{log_data.get('severity', '')}|{log_data.get('hostname', '')}|{log_data.get('source_ip', '')}|{log_data.get('app_name', '')}|{log_data.get('message', '')}|{log_data.get('raw_message', '')}"
+        return hashlib.sha256(data_str.encode()).hexdigest()
     
     def insert_log(self, log_data):
         conn = self._get_conn()
         cursor = conn.cursor()
+        checksum = self._compute_checksum(log_data)
         cursor.execute('''
             INSERT INTO syslogs (
                 received_at, timestamp, facility, facility_str, severity,
                 severity_str, hostname, source_ip, app_name, proc_id,
-                message, raw_message, vendor, vendor_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                message, raw_message, vendor, vendor_name, checksum
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             log_data['received_at'],
             log_data['timestamp'],
@@ -89,7 +105,8 @@ class Database:
             log_data['message'],
             log_data['raw_message'],
             log_data.get('vendor', 'other'),
-            log_data.get('vendor_name', '其他')
+            log_data.get('vendor_name', '其他'),
+            checksum
         ))
         conn.commit()
         return cursor.lastrowid
@@ -103,8 +120,8 @@ class Database:
             INSERT INTO syslogs (
                 received_at, timestamp, facility, facility_str, severity,
                 severity_str, hostname, source_ip, app_name, proc_id,
-                message, raw_message, vendor, vendor_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                message, raw_message, vendor, vendor_name, checksum
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', [(
             log['received_at'],
             log['timestamp'],
@@ -119,7 +136,8 @@ class Database:
             log['message'],
             log['raw_message'],
             log.get('vendor', 'other'),
-            log.get('vendor_name', '其他')
+            log.get('vendor_name', '其他'),
+            self._compute_checksum(log)
         ) for log in logs_list])
         conn.commit()
     
@@ -327,6 +345,79 @@ class Database:
         cursor.execute('DELETE FROM syslogs')
         conn.commit()
         cursor.execute('VACUUM')
+
+    def verify_integrity(self):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT id, received_at, timestamp, facility, severity, hostname, source_ip, app_name, message, raw_message, checksum FROM syslogs ORDER BY id')
+        rows = cursor.fetchall()
+        
+        mismatches = 0
+        missing_checksum = 0
+        
+        for row in rows:
+            if not row['checksum']:
+                missing_checksum += 1
+                continue
+            
+            log_dict = {
+                'id': row['id'],
+                'received_at': row['received_at'],
+                'timestamp': row['timestamp'],
+                'facility': row['facility'],
+                'severity': row['severity'],
+                'hostname': row['hostname'],
+                'source_ip': row['source_ip'],
+                'app_name': row['app_name'],
+                'message': row['message'],
+                'raw_message': row['raw_message']
+            }
+            computed_checksum = self._compute_checksum(log_dict)
+            if computed_checksum != row['checksum']:
+                mismatches += 1
+        
+        valid = mismatches == 0
+        if missing_checksum > 0 and mismatches == 0:
+            valid = True
+        
+        return {
+            'total_records': len(rows),
+            'mismatches': mismatches,
+            'missing_checksum': missing_checksum,
+            'valid': valid
+        }
+
+    def create_integrity_snapshot(self):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT checksum FROM syslogs ORDER BY id')
+        rows = cursor.fetchall()
+        
+        total_hash = hashlib.sha256()
+        for row in rows:
+            total_hash.update(row['checksum'].encode())
+        
+        total_hash_str = total_hash.hexdigest()
+        
+        cursor.execute('''
+            INSERT INTO integrity_snapshots (snapshot_time, total_records, total_hash)
+            VALUES (?, ?, ?)
+        ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), len(rows), total_hash_str))
+        conn.commit()
+        
+        return {
+            'snapshot_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'total_records': len(rows),
+            'total_hash': total_hash_str
+        }
+
+    def get_integrity_snapshots(self, limit=10):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM integrity_snapshots ORDER BY id DESC LIMIT ?', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
 
 
 class LogWriter(threading.Thread):
