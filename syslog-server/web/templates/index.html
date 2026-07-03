@@ -222,6 +222,64 @@
             display: flex;
             flex-direction: column;
         }
+
+        #tab-settings {
+            flex-direction: row;
+        }
+        
+        .settings-sidebar {
+            width: 200px;
+            background: #f9fafb;
+            border-right: 1px solid #e5e7eb;
+            padding: 20px 0;
+        }
+        
+        .settings-nav {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .settings-nav-item {
+            padding: 12px 20px;
+            font-size: 14px;
+            color: #4b5563;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        
+        .settings-nav-item:hover {
+            background: #f3f4f6;
+            color: #374151;
+        }
+        
+        .settings-nav-item.active {
+            background: white;
+            color: #3b82f6;
+            border-left-color: #3b82f6;
+            font-weight: 500;
+        }
+        
+        .settings-main {
+            flex: 1;
+            padding: 24px;
+            overflow: auto;
+        }
+        
+        .settings-content {
+            display: none;
+        }
+        
+        .settings-content.active {
+            display: block;
+        }
+        
+        .settings-content h3 {
+            font-size: 18px;
+            color: #1f2937;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
         
         .stats-cards {
             display: grid;
@@ -1305,7 +1363,6 @@
                 <div class="tab active" onclick="switchTab('logs')">📋 日志列表</div>
                 <div class="tab" onclick="switchTab('dashboard')">📊 统计面板</div>
                 <div class="tab" onclick="switchTab('live')">📡 实时监控</div>
-                <div class="tab" onclick="switchTab('hosts')">🔒 可信主机设备</div>
                 <div class="tab" onclick="switchTab('settings')">⚙️ 设置</div>
             </div>
             
@@ -1429,154 +1486,176 @@
                 </div>
             </div>
 
-            <div class="tab-content" id="tab-hosts">
-                <div class="settings-section">
-                    <h4>🖧 服务器网络接口</h4>
-                    <div class="setting-desc" style="margin-bottom:16px;">自动识别当前服务器的所有网络接口及其IP地址，可快速将接口IP添加到可信主机白名单。</div>
-                    <table class="hosts-table" id="network-interfaces-table">
-                        <thead>
-                            <tr>
-                                <th>接口名称</th>
-                                <th>MAC地址</th>
-                                <th>IPv4地址</th>
-                                <th>IPv6地址</th>
-                                <th>状态</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="network-interfaces-body">
-                            <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="settings-section">
-                    <h4>🔒 可信主机白名单</h4>
-                    <div class="setting-desc" style="margin-bottom:16px;">配置可信主机白名单，仅白名单内的IP可以登录Web管理界面。留空则允许所有IP访问。</div>
-                    <div class="add-host-form">
-                        <input type="text" id="new-host-hostname" placeholder="主机名（可选）" style="width:160px;">
-                        <input type="text" id="new-host-ip" placeholder="IP地址（如 192.168.1.1）" style="width:160px;">
-                        <input type="text" id="new-host-desc" placeholder="描述（可选）" style="width:200px;">
-                        <button class="btn btn-success" onclick="addTrustedHost()">+ 添加</button>
-                    </div>
-                    <table class="hosts-table" id="trusted-hosts-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>主机名</th>
-                                <th>IP地址</th>
-                                <th>描述</th>
-                                <th>状态</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="trusted-hosts-body">
-                            <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
             <div class="tab-content" id="tab-settings">
-                <div class="settings-section">
-                    <h4>🕐 时间同步设置</h4>
-                    <div class="setting-row">
-                        <div class="setting-label">NTP 服务器</div>
-                        <input type="text" class="setting-input" id="ntp-servers" placeholder="pool.ntp.org, time.nist.gov">
-                    </div>
-                    <div class="setting-desc">多个 NTP 服务器用逗号分隔，用于时间同步验证</div>
-                    <div class="setting-actions">
-                        <button class="btn btn-primary" onclick="saveNtpSettings()">保存设置</button>
-                        <button class="btn btn-secondary" onclick="testNtp()">测试连接</button>
-                    </div>
-                    <div id="ntp-result" class="ntp-result" style="display:none;"></div>
-                </div>
-
-                <div class="settings-section">
-                    <h4>🌐 网络接口设置</h4>
-                    <div class="setting-desc">配置 Syslog 服务和 Web 界面的监听地址与端口（修改后需重启服务生效）</div>
-                    <div class="setting-row">
-                        <div class="setting-label">Syslog 监听地址</div>
-                        <input type="text" class="setting-input" id="syslog-host" placeholder="0.0.0.0">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">Syslog UDP 端口</div>
-                        <input type="number" class="setting-input" id="syslog-udp-port" placeholder="5140">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">Syslog TCP 端口</div>
-                        <input type="number" class="setting-input" id="syslog-tcp-port" placeholder="5140">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">Web 监听地址</div>
-                        <input type="text" class="setting-input" id="web-host" placeholder="0.0.0.0">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">Web 端口</div>
-                        <input type="number" class="setting-input" id="web-port" placeholder="5000">
-                    </div>
-                    <div class="setting-actions">
-                        <button class="btn btn-primary" onclick="saveNetworkSettings()">保存网络设置</button>
+                <div class="settings-sidebar">
+                    <div class="settings-nav">
+                        <div class="settings-nav-item active" onclick="switchSettingsTab('ntp')">🕐 时间同步</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('interfaces')">🖧 物理接口</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('network')">🌐 网络设置</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('alert')">📧 邮件告警</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('hosts')">🔒 可信主机</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('account')">👤 账户设置</div>
                     </div>
                 </div>
+                <div class="settings-main">
+                    <div class="settings-content active" id="settings-ntp">
+                        <h3>🕐 时间同步设置</h3>
+                        <div class="settings-section">
+                            <div class="setting-row">
+                                <div class="setting-label">NTP 服务器</div>
+                                <input type="text" class="setting-input" id="ntp-servers" placeholder="pool.ntp.org, time.nist.gov">
+                            </div>
+                            <div class="setting-desc">多个 NTP 服务器用逗号分隔，用于时间同步验证</div>
+                            <div class="setting-actions">
+                                <button class="btn btn-primary" onclick="saveNtpSettings()">保存设置</button>
+                                <button class="btn btn-secondary" onclick="testNtp()">测试连接</button>
+                            </div>
+                            <div id="ntp-result" class="ntp-result" style="display:none;"></div>
+                        </div>
+                    </div>
 
-                <div class="settings-section">
-                    <h4>📧 邮件告警设置</h4>
-                    <div class="setting-desc">配置邮件告警通知，当触发告警规则时发送邮件通知</div>
-                    <div class="setting-row">
-                        <div class="setting-label">启用邮件告警</div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="alert-email-enabled">
-                            <span class="toggle-slider"></span>
-                        </label>
+                    <div class="settings-content" id="settings-interfaces">
+                        <h3>🖧 物理接口</h3>
+                        <div class="settings-section">
+                            <div class="setting-desc" style="margin-bottom:16px;">自动识别当前服务器的所有物理接口及其IP地址，可选择接口IP作为Syslog监听地址（修改后需重启服务生效）。</div>
+                            <table class="hosts-table" id="network-interfaces-table">
+                                <thead>
+                                    <tr>
+                                        <th>接口名称</th>
+                                        <th>MAC地址</th>
+                                        <th>IPv4地址</th>
+                                        <th>IPv6地址</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="network-interfaces-body">
+                                    <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="setting-row">
-                        <div class="setting-label">SMTP 服务器</div>
-                        <input type="text" class="setting-input" id="alert-email-smtp-server" placeholder="smtp.example.com">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">SMTP 端口</div>
-                        <input type="number" class="setting-input" id="alert-email-smtp-port" placeholder="587">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">发件人邮箱</div>
-                        <input type="text" class="setting-input" id="alert-email-sender" placeholder="sender@example.com">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">收件人邮箱</div>
-                        <input type="text" class="setting-input" id="alert-email-recipient" placeholder="recipient@example.com">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">SMTP 用户名</div>
-                        <input type="text" class="setting-input" id="alert-email-username" placeholder="username">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">SMTP 密码</div>
-                        <input type="password" class="setting-input" id="alert-email-password" placeholder="password">
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-label">Webhook URL（可选）</div>
-                        <input type="text" class="setting-input" id="alert-webhook-url" placeholder="https://hooks.example.com">
-                    </div>
-                    <div class="setting-actions">
-                        <button class="btn btn-primary" onclick="saveAlertSettings()">保存告警设置</button>
-                        <button class="btn btn-secondary" onclick="testEmail()">测试邮件</button>
-                    </div>
-                    <div id="email-test-result" class="ntp-result" style="display:none;"></div>
-                </div>
 
-                <div class="settings-section">
-                    <h4>👤 账户设置</h4>
-                    <div class="setting-row">
-                        <div class="setting-label">管理员密码</div>
-                        <input type="password" class="setting-input" id="admin-password" placeholder="输入新密码">
+                    <div class="settings-content" id="settings-network">
+                        <h3>🌐 网络设置</h3>
+                        <div class="settings-section">
+                            <div class="setting-desc">配置 Syslog 服务和 Web 界面的监听地址与端口（修改后需重启服务生效）</div>
+                            <div class="setting-row">
+                                <div class="setting-label">Syslog 监听地址</div>
+                                <input type="text" class="setting-input" id="syslog-host" placeholder="0.0.0.0">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">Syslog UDP 端口</div>
+                                <input type="number" class="setting-input" id="syslog-udp-port" placeholder="5140">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">Syslog TCP 端口</div>
+                                <input type="number" class="setting-input" id="syslog-tcp-port" placeholder="5140">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">Web 监听地址</div>
+                                <input type="text" class="setting-input" id="web-host" placeholder="0.0.0.0">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">Web 端口</div>
+                                <input type="number" class="setting-input" id="web-port" placeholder="5000">
+                            </div>
+                            <div class="setting-actions">
+                                <button class="btn btn-primary" onclick="saveNetworkSettings()">保存网络设置</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="setting-row">
-                        <div class="setting-label">确认密码</div>
-                        <input type="password" class="setting-input" id="admin-password-confirm" placeholder="再次输入新密码">
+
+                    <div class="settings-content" id="settings-alert">
+                        <h3>📧 邮件告警设置</h3>
+                        <div class="settings-section">
+                            <div class="setting-desc">配置邮件告警通知，当触发告警规则时发送邮件通知</div>
+                            <div class="setting-row">
+                                <div class="setting-label">启用邮件告警</div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="alert-email-enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">SMTP 服务器</div>
+                                <input type="text" class="setting-input" id="alert-email-smtp-server" placeholder="smtp.example.com">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">SMTP 端口</div>
+                                <input type="number" class="setting-input" id="alert-email-smtp-port" placeholder="587">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">发件人邮箱</div>
+                                <input type="text" class="setting-input" id="alert-email-sender" placeholder="sender@example.com">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">收件人邮箱</div>
+                                <input type="text" class="setting-input" id="alert-email-recipient" placeholder="recipient@example.com">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">SMTP 用户名</div>
+                                <input type="text" class="setting-input" id="alert-email-username" placeholder="username">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">SMTP 密码</div>
+                                <input type="password" class="setting-input" id="alert-email-password" placeholder="password">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">Webhook URL（可选）</div>
+                                <input type="text" class="setting-input" id="alert-webhook-url" placeholder="https://hooks.example.com">
+                            </div>
+                            <div class="setting-actions">
+                                <button class="btn btn-primary" onclick="saveAlertSettings()">保存告警设置</button>
+                                <button class="btn btn-secondary" onclick="testEmail()">测试邮件</button>
+                            </div>
+                            <div id="email-test-result" class="ntp-result" style="display:none;"></div>
+                        </div>
                     </div>
-                    <div class="setting-actions">
-                        <button class="btn btn-primary" onclick="savePassword()">修改密码</button>
+
+                    <div class="settings-content" id="settings-hosts">
+                        <h3>🔒 可信主机白名单</h3>
+                        <div class="settings-section">
+                            <div class="setting-desc" style="margin-bottom:16px;">配置可信主机白名单，仅白名单内的IP可以登录Web管理界面。留空则允许所有IP访问。</div>
+                            <div class="add-host-form">
+                                <input type="text" id="new-host-hostname" placeholder="主机名（可选）" style="width:160px;">
+                                <input type="text" id="new-host-ip" placeholder="IP地址（如 192.168.1.1）" style="width:160px;">
+                                <input type="text" id="new-host-desc" placeholder="描述（可选）" style="width:200px;">
+                                <button class="btn btn-success" onclick="addTrustedHost()">+ 添加</button>
+                            </div>
+                            <table class="hosts-table" id="trusted-hosts-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>主机名</th>
+                                        <th>IP地址</th>
+                                        <th>描述</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="trusted-hosts-body">
+                                    <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="settings-content" id="settings-account">
+                        <h3>👤 账户设置</h3>
+                        <div class="settings-section">
+                            <div class="setting-row">
+                                <div class="setting-label">管理员密码</div>
+                                <input type="password" class="setting-input" id="admin-password" placeholder="输入新密码">
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">确认密码</div>
+                                <input type="password" class="setting-input" id="admin-password-confirm" placeholder="再次输入新密码">
+                            </div>
+                            <div class="setting-actions">
+                                <button class="btn btn-primary" onclick="savePassword()">修改密码</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2073,13 +2152,25 @@
                 refreshStats();
             }
             
-            if (tab === 'hosts') {
+            if (tab === 'settings') {
+                loadSettings();
                 loadNetworkInterfaces();
                 loadTrustedHosts();
             }
+        }
+
+        function switchSettingsTab(tab) {
+            document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.settings-content').forEach(c => c.classList.remove('active'));
             
-            if (tab === 'settings') {
-                loadSettings();
+            event.target.classList.add('active');
+            document.getElementById(`settings-${tab}`).classList.add('active');
+            
+            if (tab === 'interfaces') {
+                loadNetworkInterfaces();
+            }
+            if (tab === 'hosts') {
+                loadTrustedHosts();
             }
         }
         
@@ -2792,8 +2883,8 @@
                 const statusClass = iface.status === 'up' ? 'badge-success' : 'badge-danger';
                 const statusText = iface.status === 'up' ? '运行中' : '未启用';
                 
-                const addButtons = iface.ipv4.map(ip => 
-                    `<button class="btn btn-success btn-sm" onclick="addIPToTrusted('${ip.address}', '${iface.name}')">添加到白名单</button>`
+                const modifyButtons = iface.ipv4.map(ip => 
+                    `<button class="btn btn-primary btn-sm" onclick="setSyslogHost('${ip.address}')">修改</button>`
                 ).join('');
                 
                 return `
@@ -2804,11 +2895,17 @@
                         <td style="max-width:200px;">${ipv6List || '-'}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
                         <td>
-                            <div class="host-actions">${addButtons}</div>
+                            <div class="host-actions">${modifyButtons}</div>
                         </td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        function setSyslogHost(ipAddress) {
+            document.getElementById('syslog-host').value = ipAddress;
+            switchSettingsTab('network');
+            alert(`已将 Syslog 监听地址设置为 ${ipAddress}\n\n请点击"保存网络设置"按钮保存更改（需重启服务生效）`);
         }
 
         async function addIPToTrusted(ipAddress, interfaceName) {
