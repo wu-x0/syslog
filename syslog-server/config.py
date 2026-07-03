@@ -27,6 +27,9 @@ class Config:
     ADMIN_USERNAME = 'admin'
     ADMIN_PASSWORD = 'syslog@2024'
     SESSION_SECRET_KEY = 'syslog-server-secret-key-change-in-production'
+    SESSION_TIMEOUT = 3600
+    LOGIN_MAX_ATTEMPTS = 5
+    LOGIN_BAN_DURATION = 300
 
     ALERT_ENABLED = True
     ALERT_WEBHOOK_URL = None

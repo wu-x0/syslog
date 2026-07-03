@@ -98,6 +98,15 @@ class Database:
                 updated_at TEXT
             )
         ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS login_failures (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip_address TEXT NOT NULL,
+                failure_time TEXT NOT NULL,
+                created_at TEXT
+            )
+        ''')
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_timestamp ON syslogs(timestamp)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_severity ON syslogs(severity)')
@@ -606,6 +615,53 @@ class Database:
     def get_enabled_static_routes(self):
         routes = self.get_static_routes()
         return [r for r in routes if r['enabled'] == 1]
+
+    def record_login_failure(self, ip_address):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT INTO login_failures (ip_address, failure_time, created_at)
+            VALUES (?, ?, ?)
+        ''', (ip_address, now, now))
+        conn.commit()
+
+    def get_login_failures(self, ip_address, within_seconds=300):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cutoff_time = datetime.now() - timedelta(seconds=within_seconds)
+        cutoff_str = cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            SELECT COUNT(*) as count FROM login_failures
+            WHERE ip_address = ? AND failure_time >= ?
+        ''', (ip_address, cutoff_str))
+        result = cursor.fetchone()
+        return result['count'] if result else 0
+
+    def is_ip_banned(self, ip_address, ban_duration=300):
+        max_attempts = int(self.get_setting('login_max_attempts', 5))
+        failures = self.get_login_failures(ip_address, ban_duration)
+        return failures >= max_attempts
+
+    def clear_login_failures(self, ip_address):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM login_failures WHERE ip_address = ?', (ip_address,))
+        conn.commit()
+
+    def get_all_banned_ips(self, ban_duration=300):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        max_attempts = int(self.get_setting('login_max_attempts', 5))
+        cutoff_time = datetime.now() - timedelta(seconds=ban_duration)
+        cutoff_str = cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            SELECT ip_address, COUNT(*) as count FROM login_failures
+            WHERE failure_time >= ?
+            GROUP BY ip_address
+            HAVING count >= ?
+        ''', (cutoff_str, max_attempts))
+        return [dict(row) for row in cursor.fetchall()]
 
 
 class LogWriter(threading.Thread):

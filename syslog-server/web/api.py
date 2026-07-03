@@ -29,6 +29,17 @@ def login_required(f):
             return f(*args, **kwargs)
         if 'logged_in' not in session or not session['logged_in']:
             return redirect(url_for('api.login'))
+        
+        # 检查 session 超时
+        timeout = int(db.get_setting('session_timeout', 3600)) if db else 3600
+        login_time = session.get('login_time', 0)
+        if time.time() - login_time > timeout:
+            session.clear()
+            return redirect(url_for('api.login'))
+        
+        # 更新最后活动时间（可选，用于滑动过期）
+        session['last_activity'] = time.time()
+        
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
@@ -84,9 +95,12 @@ def login():
     if request.method == 'POST':
         client_ip = request.remote_addr
         
-        if db and hasattr(db, 'is_trusted_host'):
-            if not db.is_trusted_host(ip_address=client_ip):
-                return render_template('login.html', error=f'您的IP ({client_ip}) 不在可信主机列表中')
+        # 检查IP是否被封禁
+        ban_duration = int(db.get_setting('login_ban_duration', 300)) if db else 300
+        max_attempts = int(db.get_setting('login_max_attempts', 5)) if db else 5
+        
+        if db and hasattr(db, 'is_ip_banned') and db.is_ip_banned(client_ip, ban_duration):
+            return render_template('login.html', error=f'您的IP ({client_ip}) 因多次登录失败已被临时封禁，请稍后再试')
         
         username = request.form.get('username')
         password = request.form.get('password')
@@ -94,10 +108,20 @@ def login():
         stored_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD) if db else Config.ADMIN_PASSWORD
         
         if username == Config.ADMIN_USERNAME and password == stored_password:
+            # 登录成功，清除失败记录
+            if db and hasattr(db, 'clear_login_failures'):
+                db.clear_login_failures(client_ip)
             session['logged_in'] = True
             session['username'] = username
+            session['login_time'] = time.time()
             return redirect(url_for('api.index'))
         else:
+            # 登录失败，记录失败次数
+            if db and hasattr(db, 'record_login_failure'):
+                db.record_login_failure(client_ip)
+                attempts = db.get_login_failures(client_ip, ban_duration)
+                if attempts >= max_attempts:
+                    return render_template('login.html', error=f'您的IP ({client_ip}) 因连续{max_attempts}次登录失败已被封禁{ban_duration}秒')
             return render_template('login.html', error='用户名或密码错误')
     return render_template('login.html')
 
@@ -586,6 +610,9 @@ def get_settings():
     return jsonify({
         'ntp_servers': db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS)),
         'admin_password': db.get_setting('admin_password', Config.ADMIN_PASSWORD),
+        'session_timeout': int(db.get_setting('session_timeout', 3600)),
+        'login_max_attempts': int(db.get_setting('login_max_attempts', 5)),
+        'login_ban_duration': int(db.get_setting('login_ban_duration', 300)),
         'alert_email_enabled': db.get_setting('alert_email_enabled', Config.ALERT_EMAIL_ENABLED),
         'alert_email_smtp_server': db.get_setting('alert_email_smtp_server', Config.ALERT_EMAIL_SMTP_SERVER or ''),
         'alert_email_smtp_port': int(db.get_setting('alert_email_smtp_port', Config.ALERT_EMAIL_SMTP_PORT)),
@@ -606,6 +633,15 @@ def update_settings():
     
     if 'admin_password' in data:
         db.set_setting('admin_password', data['admin_password'])
+    
+    if 'session_timeout' in data:
+        db.set_setting('session_timeout', data['session_timeout'])
+    
+    if 'login_max_attempts' in data:
+        db.set_setting('login_max_attempts', data['login_max_attempts'])
+    
+    if 'login_ban_duration' in data:
+        db.set_setting('login_ban_duration', data['login_ban_duration'])
     
     if 'alert_email_enabled' in data:
         db.set_setting('alert_email_enabled', data['alert_email_enabled'])
