@@ -23,18 +23,10 @@ def init_api(database, queue):
     log_queue = queue
     _start_rate_monitor()
 
-def _is_ip_trusted(ip_address):
-    if not db or not hasattr(db, 'is_trusted_host'):
-        return True
-    return db.is_trusted_host(ip_address=ip_address)
-
 def login_required(f):
     def wrapper(*args, **kwargs):
         if not Config.AUTH_ENABLED:
             return f(*args, **kwargs)
-        client_ip = request.remote_addr
-        if not _is_ip_trusted(client_ip):
-            abort(403)
         if 'logged_in' not in session or not session['logged_in']:
             return redirect(url_for('api.login'))
         return f(*args, **kwargs)
@@ -89,10 +81,13 @@ def index():
 
 @api_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    client_ip = request.remote_addr
-    if not _is_ip_trusted(client_ip):
-        abort(403)
     if request.method == 'POST':
+        client_ip = request.remote_addr
+        
+        if db and hasattr(db, 'is_trusted_host'):
+            if not db.is_trusted_host(ip_address=client_ip):
+                return render_template('login.html', error=f'您的IP ({client_ip}) 不在可信主机列表中')
+        
         username = request.form.get('username')
         password = request.form.get('password')
         
