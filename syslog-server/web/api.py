@@ -4,16 +4,62 @@ from config import Config
 from syslog_server.vendor_detector import get_detector
 import json
 import time
-from datetime import datetime
+import os
+import threading
+from datetime import datetime, timedelta
+from collections import deque
 
 api_bp = Blueprint('api', __name__)
 db = None
 log_queue = None
 
+_rate_lock = threading.Lock()
+_recent_counts = deque()
+_total_received = 0
+
 def init_api(database, queue):
     global db, log_queue
     db = database
     log_queue = queue
+    _start_rate_monitor()
+
+def record_log_received(count=1):
+    global _total_received
+    with _rate_lock:
+        _total_received += count
+
+def _start_rate_monitor():
+    def monitor():
+        while True:
+            time.sleep(1)
+            with _rate_lock:
+                now = time.time()
+                _recent_counts.append((now, _total_received))
+                while _recent_counts and now - _recent_counts[0][0] > 300:
+                    _recent_counts.popleft()
+    t = threading.Thread(target=monitor, daemon=True)
+    t.start()
+
+def get_current_rate():
+    with _rate_lock:
+        if len(_recent_counts) < 2:
+            return 0, 0, 0
+        now = time.time()
+        recent_1min = [(t, c) for t, c in _recent_counts if now - t <= 60]
+        recent_5min = list(_recent_counts)
+        if len(recent_1min) < 2:
+            rate_1min = 0
+        else:
+            time_diff = recent_1min[-1][0] - recent_1min[0][0]
+            count_diff = recent_1min[-1][1] - recent_1min[0][1]
+            rate_1min = count_diff / time_diff if time_diff > 0 else 0
+        if len(recent_5min) < 2:
+            rate_5min = 0
+        else:
+            time_diff = recent_5min[-1][0] - recent_5min[0][0]
+            count_diff = recent_5min[-1][1] - recent_5min[0][1]
+            rate_5min = count_diff / time_diff if time_diff > 0 else 0
+        return rate_1min, rate_5min, _total_received
 
 @api_bp.route('/')
 def index():
@@ -65,7 +111,161 @@ def get_log(log_id):
 def get_stats():
     hours = request.args.get('hours', 24, type=int)
     stats = db.get_statistics(hours=hours)
+
+    rate_1min, rate_5min, total_received = get_current_rate()
+    stats['rate_1min'] = round(rate_1min, 2)
+    stats['rate_5min'] = round(rate_5min, 2)
+    stats['total_received_since_start'] = total_received
+
+    storage_info = _get_storage_info()
+    stats['storage'] = storage_info
+
+    compliance = _check_compliance(stats, storage_info)
+    stats['compliance'] = compliance
+
     return jsonify(stats)
+
+def _get_storage_info():
+    db_path = Config.DATABASE_PATH
+    try:
+        db_size = os.path.getsize(db_path)
+    except OSError:
+        db_size = 0
+
+    total_logs = 0
+    try:
+        conn = db._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) as count FROM syslogs')
+        total_logs = cursor.fetchone()['count']
+    except Exception:
+        pass
+
+    avg_log_size = db_size / total_logs if total_logs > 0 else 500
+
+    try:
+        statvfs = os.statvfs(os.path.dirname(db_path))
+        total_space = statvfs.f_frsize * statvfs.f_blocks
+        free_space = statvfs.f_frsize * statvfs.f_bavail
+    except Exception:
+        total_space = 0
+        free_space = 0
+
+    rate_1min, rate_5min, _ = get_current_rate()
+    rate_per_day = rate_5min * 86400 if rate_5min > 0 else 0
+
+    est_days_by_db = 0
+    est_days_by_disk = 0
+    max_days = Config.MAX_LOG_AGE_DAYS
+
+    if rate_per_day > 0 and avg_log_size > 0:
+        if total_logs > 0:
+            current_days_data = (db_size / (total_logs / max_days)) if max_days > 0 else 0
+        est_days_by_db = (free_space / avg_log_size) / rate_per_day if rate_per_day > 0 else 0
+        est_days_by_disk = (free_space / avg_log_size) / rate_per_day if rate_per_day > 0 else 0
+        est_days_by_db = min(est_days_by_db, max_days)
+
+    daily_growth_bytes = rate_per_day * avg_log_size
+
+    return {
+        'db_size_bytes': db_size,
+        'db_size_mb': round(db_size / 1024 / 1024, 2),
+        'total_logs': total_logs,
+        'avg_log_size_bytes': round(avg_log_size, 1),
+        'free_space_bytes': free_space,
+        'free_space_gb': round(free_space / 1024 / 1024 / 1024, 2),
+        'total_space_bytes': total_space,
+        'total_space_gb': round(total_space / 1024 / 1024 / 1024, 2),
+        'rate_per_day': round(rate_per_day, 0),
+        'daily_growth_mb': round(daily_growth_bytes / 1024 / 1024, 2),
+        'estimated_days_by_space': round(est_days_by_disk, 1),
+        'estimated_days_by_config': max_days,
+        'max_log_age_days': max_days
+    }
+
+def _check_compliance(stats, storage_info):
+    checks = []
+    overall_pass = True
+
+    retention_days = storage_info.get('estimated_days_by_space', 0)
+    config_retention = storage_info.get('max_log_age_days', 0)
+    min_retention = min(retention_days, config_retention)
+    retention_pass = min_retention >= 180
+    checks.append({
+        'id': 'retention',
+        'name': '日志留存时间',
+        'requirement': '日志留存不少于6个月（180天）',
+        'current': f'预估可留存 {round(min_retention, 1)} 天（配置保留 {config_retention} 天）',
+        'pass': retention_pass
+    })
+    if not retention_pass:
+        overall_pass = False
+
+    required_fields = ['id', 'timestamp', 'severity', 'facility', 'hostname', 'source_ip', 'app_name', 'message', 'raw_message', 'received_at']
+    field_check_pass = True
+    sample_log = stats.get('severity_stats', {})
+    if sample_log:
+        field_check_pass = True
+    checks.append({
+        'id': 'log_fields',
+        'name': '日志字段完整性',
+        'requirement': '记录事件时间、类型、主体、结果等',
+        'current': '包含时间、级别、设施、主机、IP、应用、消息等字段',
+        'pass': True
+    })
+
+    checks.append({
+        'id': 'time_sync',
+        'name': '时间同步',
+        'requirement': '系统时间准确，日志时间戳可信',
+        'current': '使用系统本地时间',
+        'pass': True,
+        'warn': True
+    })
+
+    checks.append({
+        'id': 'backup',
+        'name': '日志备份',
+        'requirement': '审计记录定期备份，防止意外丢失',
+        'current': '当前未配置自动备份机制',
+        'pass': False
+    })
+    overall_pass = False
+
+    checks.append({
+        'id': 'integrity',
+        'name': '日志完整性保护',
+        'requirement': '防止日志被未授权删除或修改',
+        'current': '数据库文件可被修改，未启用完整性校验',
+        'pass': False
+    })
+    overall_pass = False
+
+    checks.append({
+        'id': 'access_control',
+        'name': '访问控制',
+        'requirement': '仅授权人员可访问和操作日志',
+        'current': 'Web界面无身份认证',
+        'pass': False
+    })
+    overall_pass = False
+
+    checks.append({
+        'id': 'alert',
+        'name': '异常告警',
+        'requirement': '对重要安全事件进行告警',
+        'current': '未配置安全事件告警规则',
+        'pass': False
+    })
+    overall_pass = False
+
+    return {
+        'level': '等保三级',
+        'overall_pass': overall_pass,
+        'checks': checks,
+        'pass_count': sum(1 for c in checks if c['pass']),
+        'total_count': len(checks)
+    }
 
 @api_bp.route('/api/recent', methods=['GET'])
 def get_recent():

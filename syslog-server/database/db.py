@@ -349,11 +349,21 @@ class LogWriter(threading.Thread):
                 
                 if len(batch) >= self.batch_size or (time.time() - last_flush) > self.batch_timeout:
                     self.db.insert_many_logs(batch)
+                    try:
+                        from web.api import record_log_received
+                        record_log_received(len(batch))
+                    except Exception:
+                        pass
                     batch = []
                     last_flush = time.time()
             except queue.Empty:
                 if batch:
                     self.db.insert_many_logs(batch)
+                    try:
+                        from web.api import record_log_received
+                        record_log_received(len(batch))
+                    except Exception:
+                        pass
                     batch = []
                     last_flush = time.time()
     
