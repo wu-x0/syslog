@@ -86,6 +86,18 @@ class Database:
                 updated_at TEXT
             )
         ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS static_routes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                destination TEXT NOT NULL,
+                gateway TEXT NOT NULL,
+                metric INTEGER DEFAULT 100,
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        ''')
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_timestamp ON syslogs(timestamp)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_severity ON syslogs(severity)')
@@ -535,6 +547,65 @@ class Database:
                 return True
         
         return False
+
+    def get_static_routes(self):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM static_routes ORDER BY id')
+        return [dict(row) for row in cursor.fetchall()]
+
+    def add_static_route(self, destination, gateway, metric=100):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT INTO static_routes (destination, gateway, metric, enabled, created_at, updated_at)
+            VALUES (?, ?, ?, 1, ?, ?)
+        ''', (destination, gateway, metric, now, now))
+        conn.commit()
+        return cursor.lastrowid
+
+    def update_static_route(self, route_id, destination=None, gateway=None, metric=None, enabled=None):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        fields = []
+        values = []
+        if destination is not None:
+            fields.append('destination = ?')
+            values.append(destination)
+        if gateway is not None:
+            fields.append('gateway = ?')
+            values.append(gateway)
+        if metric is not None:
+            fields.append('metric = ?')
+            values.append(metric)
+        if enabled is not None:
+            fields.append('enabled = ?')
+            values.append(1 if enabled else 0)
+        
+        if not fields:
+            return False
+        
+        fields.append('updated_at = ?')
+        values.append(now)
+        values.append(route_id)
+        
+        cursor.execute(f"UPDATE static_routes SET {', '.join(fields)} WHERE id = ?", values)
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def delete_static_route(self, route_id):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM static_routes WHERE id = ?', (route_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def get_enabled_static_routes(self):
+        routes = self.get_static_routes()
+        return [r for r in routes if r['enabled'] == 1]
 
 
 class LogWriter(threading.Thread):

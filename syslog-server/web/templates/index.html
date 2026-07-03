@@ -1284,6 +1284,7 @@
                 <span>服务运行中</span>
             </div>
             <button class="btn btn-secondary btn-sm" onclick="sendTestLogs()">📤 发送测试日志</button>
+            <button class="btn btn-danger btn-sm" onclick="logout()">退出登录</button>
         </div>
     </div>
     
@@ -1491,7 +1492,7 @@
                     <div class="settings-nav">
                         <div class="settings-nav-item active" onclick="switchSettingsTab('ntp')">🕐 时间同步</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('interfaces')">🖧 物理接口</div>
-                        <div class="settings-nav-item" onclick="switchSettingsTab('network')">🌐 网络设置</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('network')">🌐 静态路由</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('alert')">📧 邮件告警</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('hosts')">🔒 可信主机</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('account')">👤 账户设置</div>
@@ -1517,7 +1518,7 @@
                     <div class="settings-content" id="settings-interfaces">
                         <h3>🖧 物理接口</h3>
                         <div class="settings-section">
-                            <div class="setting-desc" style="margin-bottom:16px;">自动识别当前服务器的所有物理接口及其IP地址。</div>
+                            <div class="setting-desc" style="margin-bottom:16px;">自动识别当前服务器的所有物理接口及其IP地址，可选择接口IP作为Syslog监听地址。</div>
                             <table class="hosts-table" id="network-interfaces-table">
                                 <thead>
                                     <tr>
@@ -1526,42 +1527,40 @@
                                         <th>IPv4地址</th>
                                         <th>IPv6地址</th>
                                         <th>状态</th>
+                                        <th>操作</th>
                                     </tr>
                                 </thead>
                                 <tbody id="network-interfaces-body">
-                                    <tr><td colspan="5" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                                    <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
                     <div class="settings-content" id="settings-network">
-                        <h3>🌐 网络设置</h3>
+                        <h3>🌐 静态路由配置</h3>
                         <div class="settings-section">
-                            <div class="setting-desc">配置 Syslog 服务和 Web 界面的监听地址与端口（修改后需重启服务生效）</div>
-                            <div class="setting-row">
-                                <div class="setting-label">Syslog 监听地址</div>
-                                <input type="text" class="setting-input" id="syslog-host" placeholder="0.0.0.0">
+                            <div class="setting-desc" style="margin-bottom:16px;">配置静态路由表，管理系统网络路由条目（修改后需重启服务生效）。</div>
+                            <div class="add-host-form">
+                                <input type="text" id="new-route-destination" placeholder="目标网络（如 192.168.2.0/24）" style="width:180px;">
+                                <input type="text" id="new-route-gateway" placeholder="网关地址（如 192.168.1.1）" style="width:160px;">
+                                <input type="text" id="new-route-metric" placeholder="优先级（如 100）" style="width:100px;">
+                                <button class="btn btn-success" onclick="addStaticRoute()">+ 添加</button>
                             </div>
-                            <div class="setting-row">
-                                <div class="setting-label">Syslog UDP 端口</div>
-                                <input type="number" class="setting-input" id="syslog-udp-port" placeholder="5140">
-                            </div>
-                            <div class="setting-row">
-                                <div class="setting-label">Syslog TCP 端口</div>
-                                <input type="number" class="setting-input" id="syslog-tcp-port" placeholder="5140">
-                            </div>
-                            <div class="setting-row">
-                                <div class="setting-label">Web 监听地址</div>
-                                <input type="text" class="setting-input" id="web-host" placeholder="0.0.0.0">
-                            </div>
-                            <div class="setting-row">
-                                <div class="setting-label">Web 端口</div>
-                                <input type="number" class="setting-input" id="web-port" placeholder="5000">
-                            </div>
-                            <div class="setting-actions">
-                                <button class="btn btn-primary" onclick="saveNetworkSettings()">保存网络设置</button>
-                            </div>
+                            <table class="hosts-table" id="static-routes-table">
+                                <thead>
+                                    <tr>
+                                        <th>目标网络</th>
+                                        <th>网关地址</th>
+                                        <th>优先级</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="static-routes-body">
+                                    <tr><td colspan="5" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
@@ -2168,6 +2167,9 @@
             if (tab === 'interfaces') {
                 loadNetworkInterfaces();
             }
+            if (tab === 'network') {
+                loadStaticRoutes();
+            }
             if (tab === 'hosts') {
                 loadTrustedHosts();
             }
@@ -2688,12 +2690,6 @@
                 const data = await res.json();
                 document.getElementById('ntp-servers').value = data.ntp_servers || '';
                 
-                document.getElementById('syslog-host').value = data.syslog_host || '0.0.0.0';
-                document.getElementById('syslog-udp-port').value = data.syslog_udp_port || 5140;
-                document.getElementById('syslog-tcp-port').value = data.syslog_tcp_port || 5140;
-                document.getElementById('web-host').value = data.web_host || '0.0.0.0';
-                document.getElementById('web-port').value = data.web_port || 5000;
-                
                 document.getElementById('alert-email-enabled').checked = data.alert_email_enabled || false;
                 document.getElementById('alert-email-smtp-server').value = data.alert_email_smtp_server || '';
                 document.getElementById('alert-email-smtp-port').value = data.alert_email_smtp_port || 587;
@@ -2721,40 +2717,6 @@
                 }
             } catch (e) {
                 console.error('Failed to save NTP settings:', e);
-                alert('保存失败');
-            }
-        }
-
-        async function saveNetworkSettings() {
-            const syslogHost = document.getElementById('syslog-host').value;
-            const syslogUdpPort = document.getElementById('syslog-udp-port').value;
-            const syslogTcpPort = document.getElementById('syslog-tcp-port').value;
-            const webHost = document.getElementById('web-host').value;
-            const webPort = document.getElementById('web-port').value;
-            
-            if (!syslogHost || !syslogUdpPort || !syslogTcpPort || !webHost || !webPort) {
-                alert('请填写所有字段');
-                return;
-            }
-            
-            try {
-                const res = await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        syslog_host: syslogHost,
-                        syslog_udp_port: parseInt(syslogUdpPort),
-                        syslog_tcp_port: parseInt(syslogTcpPort),
-                        web_host: webHost,
-                        web_port: parseInt(webPort)
-                    })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    alert('网络设置已保存（需重启服务生效）');
-                }
-            } catch (e) {
-                console.error('Failed to save network settings:', e);
                 alert('保存失败');
             }
         }
@@ -2865,14 +2827,14 @@
             } catch (e) {
                 console.error('Failed to load network interfaces:', e);
                 document.getElementById('network-interfaces-body').innerHTML = 
-                    '<tr><td colspan="5" style="text-align:center; padding:24px; color:#dc2626;">加载失败</td></tr>';
+                    '<tr><td colspan="6" style="text-align:center; padding:24px; color:#dc2626;">加载失败</td></tr>';
             }
         }
 
         function renderNetworkInterfaces(interfaces) {
             const tbody = document.getElementById('network-interfaces-body');
             if (interfaces.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:24px; color:#9ca3af;">未检测到网络接口</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">未检测到网络接口</td></tr>';
                 return;
             }
             
@@ -2882,6 +2844,10 @@
                 const statusClass = iface.status === 'up' ? 'badge-success' : 'badge-danger';
                 const statusText = iface.status === 'up' ? '运行中' : '未启用';
                 
+                const modifyButtons = iface.ipv4.map(ip => 
+                    `<button class="btn btn-primary btn-sm" onclick="editInterface('${iface.name}', '${ip.address}', '${ip.netmask || ''}')">修改</button>`
+                ).join('');
+                
                 return `
                     <tr>
                         <td><strong>${escapeHtml(iface.name)}</strong></td>
@@ -2889,9 +2855,46 @@
                         <td style="max-width:200px;">${ipv4List || '-'}</td>
                         <td style="max-width:200px;">${ipv6List || '-'}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <div class="host-actions">${modifyButtons}</div>
+                        </td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        function editInterface(ifaceName, currentIp, currentNetmask) {
+            const newIp = prompt(`修改接口 ${ifaceName} 的 IP 地址:`, currentIp);
+            if (!newIp || newIp === currentIp) return;
+            
+            const newNetmask = prompt('子网掩码 (如 255.255.255.0):', currentNetmask || '255.255.255.0');
+            if (!newNetmask) return;
+            
+            if (!confirm(`确定将 ${ifaceName} 的 IP 从 ${currentIp} 修改为 ${newIp}/${newNetmask} 吗?\n\n注意：此操作需要 root 权限，且当前仅临时生效，重启后需重新配置。`)) {
+                return;
+            }
+            
+            updateInterfaceIp(ifaceName, newIp, newNetmask);
+        }
+
+        async function updateInterfaceIp(ifaceName, ipAddress, netmask) {
+            try {
+                const res = await fetch('/api/network-interfaces', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ interface: ifaceName, ip_address: ipAddress, netmask: netmask })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('接口 IP 修改成功');
+                    loadNetworkInterfaces();
+                } else {
+                    alert(data.error || '修改失败');
+                }
+            } catch (e) {
+                console.error('Failed to update interface IP:', e);
+                alert('修改失败');
+            }
         }
 
         async function addIPToTrusted(ipAddress, interfaceName) {
@@ -3050,6 +3053,117 @@
             } catch (e) {
                 console.error('Failed to change password:', e);
                 alert('密码修改失败');
+            }
+        }
+
+        async function logout() {
+            if (!confirm('确定要退出登录吗？')) return;
+            try {
+                await fetch('/logout');
+                window.location.href = '/login';
+            } catch (e) {
+                console.error('Failed to logout:', e);
+                window.location.href = '/login';
+            }
+        }
+
+        async function loadStaticRoutes() {
+            try {
+                const res = await fetch('/api/static-routes');
+                const routes = await res.json();
+                renderStaticRoutes(routes);
+            } catch (e) {
+                console.error('Failed to load static routes:', e);
+                document.getElementById('static-routes-body').innerHTML = 
+                    '<tr><td colspan="5" style="text-align:center; padding:24px; color:#dc2626;">加载失败</td></tr>';
+            }
+        }
+
+        function renderStaticRoutes(routes) {
+            const tbody = document.getElementById('static-routes-body');
+            if (routes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:24px; color:#9ca3af;">暂无静态路由</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = routes.map(route => {
+                const statusClass = route.enabled ? 'badge-success' : 'badge-danger';
+                const statusText = route.enabled ? '启用' : '禁用';
+                return `
+                    <tr>
+                        <td>${escapeHtml(route.destination)}</td>
+                        <td>${escapeHtml(route.gateway)}</td>
+                        <td>${route.metric}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <div class="host-actions">
+                                <button class="btn btn-secondary btn-sm" onclick="toggleStaticRoute(${route.id}, ${!route.enabled})">${route.enabled ? '禁用' : '启用'}</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteStaticRoute(${route.id})">删除</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function addStaticRoute() {
+            const destination = document.getElementById('new-route-destination').value.trim();
+            const gateway = document.getElementById('new-route-gateway').value.trim();
+            const metric = document.getElementById('new-route-metric').value.trim();
+            
+            if (!destination || !gateway) {
+                alert('请输入目标网络和网关地址');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/static-routes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        destination: destination, 
+                        gateway: gateway, 
+                        metric: metric || 100
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('new-route-destination').value = '';
+                    document.getElementById('new-route-gateway').value = '';
+                    document.getElementById('new-route-metric').value = '';
+                    loadStaticRoutes();
+                } else {
+                    alert(data.error || '添加失败');
+                }
+            } catch (e) {
+                console.error('Failed to add static route:', e);
+                alert('添加失败');
+            }
+        }
+
+        async function toggleStaticRoute(id, enabled) {
+            try {
+                await fetch(`/api/static-routes/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: enabled })
+                });
+                loadStaticRoutes();
+            } catch (e) {
+                console.error('Failed to toggle static route:', e);
+            }
+        }
+
+        async function deleteStaticRoute(id) {
+            if (!confirm('确定要删除这条静态路由吗？')) return;
+            try {
+                await fetch(`/api/static-routes/${id}`, {
+                    method: 'DELETE'
+                });
+                loadStaticRoutes();
+            } catch (e) {
+                console.error('Failed to delete static route:', e);
+                alert('删除失败');
             }
         }
     </script>

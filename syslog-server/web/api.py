@@ -586,11 +586,6 @@ def get_settings():
     return jsonify({
         'ntp_servers': db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS)),
         'admin_password': db.get_setting('admin_password', Config.ADMIN_PASSWORD),
-        'syslog_host': db.get_setting('syslog_host', Config.SYSLOG_HOST),
-        'syslog_udp_port': int(db.get_setting('syslog_udp_port', Config.SYSLOG_UDP_PORT)),
-        'syslog_tcp_port': int(db.get_setting('syslog_tcp_port', Config.SYSLOG_TCP_PORT)),
-        'web_host': db.get_setting('web_host', Config.WEB_HOST),
-        'web_port': int(db.get_setting('web_port', Config.WEB_PORT)),
         'alert_email_enabled': db.get_setting('alert_email_enabled', Config.ALERT_EMAIL_ENABLED),
         'alert_email_smtp_server': db.get_setting('alert_email_smtp_server', Config.ALERT_EMAIL_SMTP_SERVER or ''),
         'alert_email_smtp_port': int(db.get_setting('alert_email_smtp_port', Config.ALERT_EMAIL_SMTP_PORT)),
@@ -611,21 +606,6 @@ def update_settings():
     
     if 'admin_password' in data:
         db.set_setting('admin_password', data['admin_password'])
-    
-    if 'syslog_host' in data:
-        db.set_setting('syslog_host', data['syslog_host'])
-    
-    if 'syslog_udp_port' in data:
-        db.set_setting('syslog_udp_port', data['syslog_udp_port'])
-    
-    if 'syslog_tcp_port' in data:
-        db.set_setting('syslog_tcp_port', data['syslog_tcp_port'])
-    
-    if 'web_host' in data:
-        db.set_setting('web_host', data['web_host'])
-    
-    if 'web_port' in data:
-        db.set_setting('web_port', data['web_port'])
     
     if 'alert_email_enabled' in data:
         db.set_setting('alert_email_enabled', data['alert_email_enabled'])
@@ -806,10 +786,7 @@ def delete_trusted_host_api(host_id):
     success = db.delete_trusted_host(host_id)
     return jsonify({'success': success})
 
-@api_bp.route('/api/network-interfaces', methods=['GET'])
-@login_required
-def get_network_interfaces():
-    import socket
+def _get_network_interfaces():
     import netifaces
     
     interfaces = []
@@ -859,7 +836,101 @@ def get_network_interfaces():
         if interface_info['status'] != 'loopback':
             interfaces.append(interface_info)
     
-    return jsonify(interfaces)
+    return interfaces
+
+@api_bp.route('/api/network-interfaces', methods=['GET', 'PUT'])
+@login_required
+def network_interfaces_api():
+    import subprocess
+    import netifaces
+    
+    if request.method == 'GET':
+        return jsonify(_get_network_interfaces())
+    
+    data = request.get_json()
+    iface = data.get('interface')
+    ip_address = data.get('ip_address')
+    netmask = data.get('netmask', '255.255.255.0')
+    
+    if not iface or not ip_address:
+        return jsonify({'success': False, 'error': '接口名称和IP地址不能为空'})
+    
+    try:
+        current_ips = []
+        try:
+            addrs = netifaces.ifaddresses(iface)
+            if netifaces.AF_INET in addrs:
+                current_ips = [a.get('addr') for a in addrs[netifaces.AF_INET] if a.get('addr')]
+        except Exception:
+            pass
+        
+        for old_ip in current_ips:
+            if old_ip and old_ip != '127.0.0.1':
+                subprocess.run(['ip', 'addr', 'del', f'{old_ip}/{netmask}', 'dev', iface], 
+                               capture_output=True, check=False)
+        
+        result = subprocess.run(
+            ['ip', 'addr', 'add', f'{ip_address}/{netmask}', 'dev', iface],
+            capture_output=True, text=True, check=False
+        )
+        
+        if result.returncode != 0:
+            return jsonify({'success': False, 'error': f'修改失败: {result.stderr}'})
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@api_bp.route('/api/static-routes', methods=['GET', 'POST'])
+@login_required
+def static_routes_api():
+    if request.method == 'GET':
+        routes = db.get_static_routes()
+        return jsonify(routes)
+    
+    data = request.get_json()
+    destination = data.get('destination', '').strip()
+    gateway = data.get('gateway', '').strip()
+    metric = data.get('metric', 100)
+    
+    if not destination or not gateway:
+        return jsonify({'success': False, 'error': '目标网络和网关地址不能为空'})
+    
+    try:
+        metric = int(metric)
+    except (ValueError, TypeError):
+        metric = 100
+    
+    route_id = db.add_static_route(destination, gateway, metric)
+    return jsonify({'success': True, 'id': route_id})
+
+@api_bp.route('/api/static-routes/<int:route_id>', methods=['PUT', 'DELETE'])
+@login_required
+def static_route_api(route_id):
+    if request.method == 'DELETE':
+        success = db.delete_static_route(route_id)
+        return jsonify({'success': success})
+    
+    data = request.get_json()
+    enabled = data.get('enabled')
+    destination = data.get('destination')
+    gateway = data.get('gateway')
+    metric = data.get('metric')
+    
+    if metric is not None:
+        try:
+            metric = int(metric)
+        except (ValueError, TypeError):
+            metric = None
+    
+    success = db.update_static_route(
+        route_id,
+        destination=destination,
+        gateway=gateway,
+        metric=metric,
+        enabled=enabled
+    )
+    return jsonify({'success': success})
 
 @api_bp.route('/api/send-test', methods=['POST'])
 def send_test():
