@@ -66,6 +66,26 @@ class Database:
                 total_hash TEXT NOT NULL
             )
         ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at TEXT
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trusted_hosts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                hostname TEXT,
+                ip_address TEXT,
+                description TEXT,
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        ''')
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_timestamp ON syslogs(timestamp)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_severity ON syslogs(severity)')
@@ -78,7 +98,7 @@ class Database:
         conn.commit()
 
     def _compute_checksum(self, log_data):
-        data_str = f"{log_data.get('id', '')}|{log_data.get('received_at', '')}|{log_data.get('timestamp', '')}|{log_data.get('facility', '')}|{log_data.get('severity', '')}|{log_data.get('hostname', '')}|{log_data.get('source_ip', '')}|{log_data.get('app_name', '')}|{log_data.get('message', '')}|{log_data.get('raw_message', '')}"
+        data_str = f"{log_data.get('received_at', '')}|{log_data.get('timestamp', '')}|{log_data.get('facility', '')}|{log_data.get('severity', '')}|{log_data.get('hostname', '')}|{log_data.get('source_ip', '')}|{log_data.get('app_name', '')}|{log_data.get('message', '')}|{log_data.get('raw_message', '')}"
         return hashlib.sha256(data_str.encode()).hexdigest()
     
     def insert_log(self, log_data):
@@ -362,7 +382,6 @@ class Database:
                 continue
             
             log_dict = {
-                'id': row['id'],
                 'received_at': row['received_at'],
                 'timestamp': row['timestamp'],
                 'facility': row['facility'],
@@ -378,8 +397,6 @@ class Database:
                 mismatches += 1
         
         valid = mismatches == 0
-        if missing_checksum > 0 and mismatches == 0:
-            valid = True
         
         return {
             'total_records': len(rows),
@@ -418,6 +435,98 @@ class Database:
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM integrity_snapshots ORDER BY id DESC LIMIT ?', (limit,))
         return [dict(row) for row in cursor.fetchall()]
+
+    def get_setting(self, key, default=None):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
+        row = cursor.fetchone()
+        if row and row['value'] is not None:
+            return row['value']
+        return default
+
+    def set_setting(self, key, value):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        ''', (key, str(value), now))
+        conn.commit()
+
+    def get_all_settings(self):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('SELECT key, value FROM settings')
+        return {row['key']: row['value'] for row in cursor.fetchall()}
+
+    def get_trusted_hosts(self):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM trusted_hosts ORDER BY id')
+        return [dict(row) for row in cursor.fetchall()]
+
+    def add_trusted_host(self, hostname=None, ip_address=None, description=''):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT INTO trusted_hosts (hostname, ip_address, description, enabled, created_at, updated_at)
+            VALUES (?, ?, ?, 1, ?, ?)
+        ''', (hostname, ip_address, description, now, now))
+        conn.commit()
+        return cursor.lastrowid
+
+    def update_trusted_host(self, host_id, hostname=None, ip_address=None, description=None, enabled=None):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        fields = []
+        values = []
+        if hostname is not None:
+            fields.append('hostname = ?')
+            values.append(hostname)
+        if ip_address is not None:
+            fields.append('ip_address = ?')
+            values.append(ip_address)
+        if description is not None:
+            fields.append('description = ?')
+            values.append(description)
+        if enabled is not None:
+            fields.append('enabled = ?')
+            values.append(1 if enabled else 0)
+        if not fields:
+            return False
+        fields.append('updated_at = ?')
+        values.append(now)
+        values.append(host_id)
+        cursor.execute(f'UPDATE trusted_hosts SET {", ".join(fields)} WHERE id = ?', values)
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def delete_trusted_host(self, host_id):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM trusted_hosts WHERE id = ?', (host_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def is_trusted_host(self, ip_address=None, hostname=None):
+        trusted = self.get_trusted_hosts()
+        enabled_hosts = [h for h in trusted if h['enabled'] == 1]
+        
+        if not enabled_hosts:
+            return True
+        
+        for host in enabled_hosts:
+            if ip_address and host['ip_address'] and host['ip_address'] == ip_address:
+                return True
+            if hostname and host['hostname'] and host['hostname'] == hostname:
+                return True
+        
+        return False
 
 
 class LogWriter(threading.Thread):

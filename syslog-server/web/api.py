@@ -84,7 +84,10 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        if username == Config.ADMIN_USERNAME and password == Config.ADMIN_PASSWORD:
+        
+        stored_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD) if db else Config.ADMIN_PASSWORD
+        
+        if username == Config.ADMIN_USERNAME and password == stored_password:
             session['logged_in'] = True
             session['username'] = username
             return redirect(url_for('api.index'))
@@ -292,13 +295,26 @@ def _check_compliance(stats, storage_info):
     if not access_status['pass']:
         overall_pass = False
 
+    trusted_status = _check_trusted_hosts()
+    checks.append({
+        'id': 'trusted_hosts',
+        'name': '可信主机控制',
+        'requirement': '仅可信主机可发送日志，防止伪造',
+        'current': trusted_status['message'],
+        'pass': trusted_status['pass'],
+        'warn': trusted_status.get('warn', False)
+    })
+    if not trusted_status['pass']:
+        overall_pass = False
+
     alert_status = _check_alert()
     checks.append({
         'id': 'alert',
         'name': '异常告警',
         'requirement': '对重要安全事件进行告警',
         'current': alert_status['message'],
-        'pass': alert_status['pass']
+        'pass': alert_status['pass'],
+        'warn': alert_status.get('warn', False)
     })
     if not alert_status['pass']:
         overall_pass = False
@@ -469,6 +485,35 @@ def _check_alert():
             'message': f'告警检查失败: {str(e)}'
         }
 
+def _check_trusted_hosts():
+    try:
+        global db
+        if db is None:
+            return {
+                'pass': False,
+                'message': '数据库未连接'
+            }
+        
+        trusted_hosts = db.get_trusted_hosts()
+        enabled_hosts = [h for h in trusted_hosts if h['enabled'] == 1]
+        
+        if len(enabled_hosts) > 0:
+            return {
+                'pass': True,
+                'message': f'可信主机过滤已启用（{len(enabled_hosts)} 台可信主机）'
+            }
+        else:
+            return {
+                'pass': False,
+                'warn': True,
+                'message': '未配置可信主机，所有主机均可发送日志（建议配置可信主机白名单）'
+            }
+    except Exception as e:
+        return {
+            'pass': False,
+            'message': f'可信主机检查失败: {str(e)}'
+        }
+
 @api_bp.route('/api/recent', methods=['GET'])
 def get_recent():
     limit = request.args.get('limit', 100, type=int)
@@ -527,6 +572,136 @@ def stream():
         }
     )
     return response
+
+@api_bp.route('/api/settings', methods=['GET'])
+@login_required
+def get_settings():
+    settings = db.get_all_settings()
+    ntp_servers = db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS))
+    admin_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD)
+    return jsonify({
+        'ntp_servers': ntp_servers,
+        'admin_password': admin_password
+    })
+
+@api_bp.route('/api/settings', methods=['POST'])
+@login_required
+def update_settings():
+    data = request.get_json() or {}
+    
+    if 'ntp_servers' in data:
+        db.set_setting('ntp_servers', data['ntp_servers'])
+    
+    if 'admin_password' in data:
+        db.set_setting('admin_password', data['admin_password'])
+    
+    return jsonify({'success': True})
+
+@api_bp.route('/api/ntp/test', methods=['POST'])
+@login_required
+def test_ntp():
+    data = request.get_json() or {}
+    ntp_servers_str = data.get('ntp_servers', db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS)))
+    ntp_servers = [s.strip() for s in ntp_servers_str.split(',') if s.strip()]
+    
+    results = []
+    overall_success = False
+    
+    try:
+        import ntplib
+        client = ntplib.NTPClient()
+        for server in ntp_servers:
+            try:
+                response = client.request(server, version=4, timeout=3)
+                offset = abs(response.offset)
+                results.append({
+                    'server': server,
+                    'success': True,
+                    'offset': offset,
+                    'message': f'连接成功，偏移 {offset:.3f} 秒'
+                })
+                if offset < 1.0:
+                    overall_success = True
+            except Exception as e:
+                results.append({
+                    'server': server,
+                    'success': False,
+                    'offset': None,
+                    'message': f'连接失败: {str(e)}'
+                })
+    except ImportError:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['timedatectl', 'status'],
+                capture_output=True, text=True, timeout=5
+            )
+            if 'NTP synchronized: yes' in result.stdout or 'synchronized: yes' in result.stdout:
+                overall_success = True
+                results.append({
+                    'server': 'systemd-timesyncd',
+                    'success': True,
+                    'offset': None,
+                    'message': '系统时间同步正常'
+                })
+            else:
+                results.append({
+                    'server': 'system',
+                    'success': False,
+                    'offset': None,
+                    'message': '系统未检测到NTP同步'
+                })
+        except Exception:
+            results.append({
+                'server': 'unknown',
+                'success': False,
+                'offset': None,
+                'message': '无法检测NTP状态'
+            })
+    
+    return jsonify({
+        'success': overall_success,
+        'results': results
+    })
+
+@api_bp.route('/api/trusted-hosts', methods=['GET'])
+@login_required
+def get_trusted_hosts():
+    hosts = db.get_trusted_hosts()
+    return jsonify(hosts)
+
+@api_bp.route('/api/trusted-hosts', methods=['POST'])
+@login_required
+def add_trusted_host():
+    data = request.get_json() or {}
+    hostname = data.get('hostname', '')
+    ip_address = data.get('ip_address', '')
+    description = data.get('description', '')
+    
+    if not hostname and not ip_address:
+        return jsonify({'error': '主机名或IP地址至少填写一项'}), 400
+    
+    host_id = db.add_trusted_host(hostname=hostname, ip_address=ip_address, description=description)
+    return jsonify({'id': host_id, 'success': True})
+
+@api_bp.route('/api/trusted-hosts/<int:host_id>', methods=['PUT'])
+@login_required
+def update_trusted_host_api(host_id):
+    data = request.get_json() or {}
+    success = db.update_trusted_host(
+        host_id,
+        hostname=data.get('hostname'),
+        ip_address=data.get('ip_address'),
+        description=data.get('description'),
+        enabled=data.get('enabled')
+    )
+    return jsonify({'success': success})
+
+@api_bp.route('/api/trusted-hosts/<int:host_id>', methods=['DELETE'])
+@login_required
+def delete_trusted_host_api(host_id):
+    success = db.delete_trusted_host(host_id)
+    return jsonify({'success': success})
 
 @api_bp.route('/api/send-test', methods=['POST'])
 def send_test():

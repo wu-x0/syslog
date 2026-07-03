@@ -269,6 +269,201 @@
             margin: 0 20px 20px;
         }
 
+        .settings-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin: 0 20px 20px;
+        }
+
+        .settings-section h4 {
+            font-size: 15px;
+            color: #1f2937;
+            margin-bottom: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+            gap: 16px;
+        }
+
+        .setting-label {
+            width: 140px;
+            font-size: 13px;
+            color: #4b5563;
+            font-weight: 500;
+        }
+
+        .setting-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .setting-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .setting-desc {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        .setting-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #f3f4f6;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #4b5563;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .hosts-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .hosts-table th {
+            text-align: left;
+            padding: 10px 12px;
+            background: #f9fafb;
+            color: #6b7280;
+            font-weight: 600;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 12px;
+        }
+
+        .hosts-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f3f4f6;
+            color: #4b5563;
+        }
+
+        .hosts-table tr:hover {
+            background: #f9fafb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .host-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .host-actions .btn {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        .add-host-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .add-host-form input {
+            padding: 6px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .add-host-form input:focus {
+            border-color: #3b82f6;
+        }
+
+        .ntp-result {
+            margin-top: 12px;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .ntp-result-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+        }
+
         .compliance-card h4 {
             font-size: 15px;
             color: #1f2937;
@@ -1065,6 +1260,7 @@
                 <div class="tab active" onclick="switchTab('logs')">📋 日志列表</div>
                 <div class="tab" onclick="switchTab('dashboard')">📊 统计面板</div>
                 <div class="tab" onclick="switchTab('live')">📡 实时监控</div>
+                <div class="tab" onclick="switchTab('settings')">⚙️ 设置</div>
             </div>
             
             <div class="tab-content active" id="tab-logs">
@@ -1183,6 +1379,63 @@
                     <h4>🛡️ 等保三级合规检查</h4>
                     <div id="compliance-container">
                         <div class="empty-state" style="width:100%; padding:40px 0;"><div class="icon">📊</div><div class="text">加载中...</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="tab-settings">
+                <div class="settings-section">
+                    <h4>🕐 时间同步设置</h4>
+                    <div class="setting-row">
+                        <div class="setting-label">NTP 服务器</div>
+                        <input type="text" class="setting-input" id="ntp-servers" placeholder="pool.ntp.org, time.nist.gov">
+                    </div>
+                    <div class="setting-desc">多个 NTP 服务器用逗号分隔，用于时间同步验证</div>
+                    <div class="setting-actions">
+                        <button class="btn btn-primary" onclick="saveNtpSettings()">保存设置</button>
+                        <button class="btn btn-secondary" onclick="testNtp()">测试连接</button>
+                    </div>
+                    <div id="ntp-result" class="ntp-result" style="display:none;"></div>
+                </div>
+
+                <div class="settings-section">
+                    <h4>🔒 可信主机管理</h4>
+                    <div class="setting-desc" style="margin-bottom:16px;">配置可信主机白名单，仅白名单内的主机可以发送日志。留空则允许所有主机。</div>
+                    <div class="add-host-form">
+                        <input type="text" id="new-host-hostname" placeholder="主机名（可选）" style="width:160px;">
+                        <input type="text" id="new-host-ip" placeholder="IP地址（如 192.168.1.1）" style="width:160px;">
+                        <input type="text" id="new-host-desc" placeholder="描述（可选）" style="width:200px;">
+                        <button class="btn btn-success" onclick="addTrustedHost()">+ 添加</button>
+                    </div>
+                    <table class="hosts-table" id="trusted-hosts-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>主机名</th>
+                                <th>IP地址</th>
+                                <th>描述</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trusted-hosts-body">
+                            <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="settings-section">
+                    <h4>👤 账户设置</h4>
+                    <div class="setting-row">
+                        <div class="setting-label">管理员密码</div>
+                        <input type="password" class="setting-input" id="admin-password" placeholder="输入新密码">
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-label">确认密码</div>
+                        <input type="password" class="setting-input" id="admin-password-confirm" placeholder="再次输入新密码">
+                    </div>
+                    <div class="setting-actions">
+                        <button class="btn btn-primary" onclick="savePassword()">修改密码</button>
                     </div>
                 </div>
             </div>
@@ -1677,6 +1930,11 @@
             
             if (tab === 'dashboard') {
                 refreshStats();
+            }
+            
+            if (tab === 'settings') {
+                loadSettings();
+                loadTrustedHosts();
             }
         }
         
@@ -2187,6 +2445,201 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                document.getElementById('ntp-servers').value = data.ntp_servers || '';
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+            }
+        }
+
+        async function saveNtpSettings() {
+            const ntpServers = document.getElementById('ntp-servers').value;
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ntp_servers: ntpServers })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('NTP 设置已保存');
+                }
+            } catch (e) {
+                console.error('Failed to save NTP settings:', e);
+                alert('保存失败');
+            }
+        }
+
+        async function testNtp() {
+            const ntpServers = document.getElementById('ntp-servers').value;
+            const resultDiv = document.getElementById('ntp-result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '正在测试...';
+            
+            try {
+                const res = await fetch('/api/ntp/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ntp_servers: ntpServers })
+                });
+                const data = await res.json();
+                
+                let html = '';
+                if (data.success) {
+                    html += '<div style="color:#16a34a; font-weight:600; margin-bottom:8px;">✅ 至少一台 NTP 服务器连接正常</div>';
+                } else {
+                    html += '<div style="color:#dc2626; font-weight:600; margin-bottom:8px;">❌ 所有 NTP 服务器均不可达</div>';
+                }
+                
+                data.results.forEach(r => {
+                    const icon = r.success ? '✅' : '❌';
+                    html += `<div class="ntp-result-item"><span>${icon}</span><span>${r.server}: ${r.message}</span></div>`;
+                });
+                
+                resultDiv.innerHTML = html;
+            } catch (e) {
+                resultDiv.innerHTML = `<div style="color:#dc2626;">测试失败: ${e.message}</div>`;
+            }
+        }
+
+        async function loadTrustedHosts() {
+            try {
+                const res = await fetch('/api/trusted-hosts');
+                const hosts = await res.json();
+                renderTrustedHosts(hosts);
+            } catch (e) {
+                console.error('Failed to load trusted hosts:', e);
+            }
+        }
+
+        function renderTrustedHosts(hosts) {
+            const tbody = document.getElementById('trusted-hosts-body');
+            if (hosts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">暂无可信主机，所有主机均可发送日志</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = hosts.map(h => `
+                <tr>
+                    <td>${h.id}</td>
+                    <td>${escapeHtml(h.hostname || '-')}</td>
+                    <td>${escapeHtml(h.ip_address || '-')}</td>
+                    <td>${escapeHtml(h.description || '-')}</td>
+                    <td>
+                        <span class="badge ${h.enabled ? 'badge-success' : 'badge-danger'}">
+                            ${h.enabled ? '已启用' : '已禁用'}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="host-actions">
+                            <button class="btn ${h.enabled ? 'btn-secondary' : 'btn-success'}" 
+                                    onclick="toggleHost(${h.id}, ${h.enabled ? 0 : 1})">
+                                ${h.enabled ? '禁用' : '启用'}
+                            </button>
+                            <button class="btn btn-danger" onclick="deleteHost(${h.id})">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function addTrustedHost() {
+            const hostname = document.getElementById('new-host-hostname').value.trim();
+            const ipAddress = document.getElementById('new-host-ip').value.trim();
+            const description = document.getElementById('new-host-desc').value.trim();
+            
+            if (!hostname && !ipAddress) {
+                alert('主机名和IP地址至少填写一项');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/trusted-hosts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hostname, ip_address: ipAddress, description })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('new-host-hostname').value = '';
+                    document.getElementById('new-host-ip').value = '';
+                    document.getElementById('new-host-desc').value = '';
+                    loadTrustedHosts();
+                } else {
+                    alert(data.error || '添加失败');
+                }
+            } catch (e) {
+                console.error('Failed to add trusted host:', e);
+                alert('添加失败');
+            }
+        }
+
+        async function toggleHost(id, enabled) {
+            try {
+                await fetch(`/api/trusted-hosts/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: enabled })
+                });
+                loadTrustedHosts();
+            } catch (e) {
+                console.error('Failed to toggle host:', e);
+            }
+        }
+
+        async function deleteHost(id) {
+            if (!confirm('确定要删除这个可信主机吗？')) return;
+            try {
+                await fetch(`/api/trusted-hosts/${id}`, {
+                    method: 'DELETE'
+                });
+                loadTrustedHosts();
+            } catch (e) {
+                console.error('Failed to delete host:', e);
+                alert('删除失败');
+            }
+        }
+
+        async function savePassword() {
+            const pwd1 = document.getElementById('admin-password').value;
+            const pwd2 = document.getElementById('admin-password-confirm').value;
+            
+            if (!pwd1 || !pwd2) {
+                alert('请输入新密码和确认密码');
+                return;
+            }
+            
+            if (pwd1 !== pwd2) {
+                alert('两次输入的密码不一致');
+                return;
+            }
+            
+            if (pwd1.length < 6) {
+                alert('密码长度至少6位');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_password: pwd1 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('admin-password').value = '';
+                    document.getElementById('admin-password-confirm').value = '';
+                    alert('密码修改成功');
+                }
+            } catch (e) {
+                console.error('Failed to change password:', e);
+                alert('密码修改失败');
+            }
         }
     </script>
 </body>

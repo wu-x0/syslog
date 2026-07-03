@@ -11,6 +11,7 @@ class UDPSyslogServer:
         self.sock = None
         self.running = False
         self.thread = None
+        self.db = None
     
     def start(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -27,6 +28,10 @@ class UDPSyslogServer:
                 data, addr = self.sock.recvfrom(65535)
                 message = data.decode('utf-8', errors='replace')
                 source_ip = addr[0]
+                
+                if self.db and hasattr(self.db, 'is_trusted_host'):
+                    if not self.db.is_trusted_host(ip_address=source_ip):
+                        continue
                 
                 parsed = parse_syslog_message(message, source_ip)
                 if parsed:

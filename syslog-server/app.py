@@ -39,6 +39,7 @@ def main():
         Config.SYSLOG_UDP_PORT,
         log_queue
     )
+    udp_server.db = db
     udp_server.start()
     
     tcp_server = TCPSyslogServer(
@@ -46,6 +47,7 @@ def main():
         Config.SYSLOG_TCP_PORT,
         log_queue
     )
+    tcp_server.db = db
     tcp_server.start()
     
     init_api(db, log_queue)
