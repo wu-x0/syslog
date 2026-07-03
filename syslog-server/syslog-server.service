@@ -1,0 +1,23 @@
+[Unit]
+Description=Syslog Log Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/syslog-server
+ExecStart=/usr/bin/python3 /opt/syslog-server/app.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 环境变量
+Environment=PYTHONUNBUFFERED=1
+
+# 安全配置
+PrivateTmp=true
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
