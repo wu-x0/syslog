@@ -12,7 +12,6 @@ class TCPSyslogServer:
         self.running = False
         self.thread = None
         self.clients = []
-        self.db = None
     
     def start(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -28,11 +27,6 @@ class TCPSyslogServer:
         while self.running:
             try:
                 conn, addr = self.sock.accept()
-                
-                if self.db and hasattr(self.db, 'is_trusted_host'):
-                    if not self.db.is_trusted_host(ip_address=addr[0]):
-                        conn.close()
-                        continue
                 
                 client_thread = threading.Thread(
                     target=self._handle_client,

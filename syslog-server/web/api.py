@@ -23,10 +23,18 @@ def init_api(database, queue):
     log_queue = queue
     _start_rate_monitor()
 
+def _is_ip_trusted(ip_address):
+    if not db or not hasattr(db, 'is_trusted_host'):
+        return True
+    return db.is_trusted_host(ip_address=ip_address)
+
 def login_required(f):
     def wrapper(*args, **kwargs):
         if not Config.AUTH_ENABLED:
             return f(*args, **kwargs)
+        client_ip = request.remote_addr
+        if not _is_ip_trusted(client_ip):
+            abort(403)
         if 'logged_in' not in session or not session['logged_in']:
             return redirect(url_for('api.login'))
         return f(*args, **kwargs)
@@ -81,6 +89,9 @@ def index():
 
 @api_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    client_ip = request.remote_addr
+    if not _is_ip_trusted(client_ip):
+        abort(403)
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -299,7 +310,7 @@ def _check_compliance(stats, storage_info):
     checks.append({
         'id': 'trusted_hosts',
         'name': '可信主机控制',
-        'requirement': '仅可信主机可发送日志，防止伪造',
+        'requirement': '仅可信主机可登录管理界面，防止未授权访问',
         'current': trusted_status['message'],
         'pass': trusted_status['pass'],
         'warn': trusted_status.get('warn', False)
@@ -500,13 +511,13 @@ def _check_trusted_hosts():
         if len(enabled_hosts) > 0:
             return {
                 'pass': True,
-                'message': f'可信主机过滤已启用（{len(enabled_hosts)} 台可信主机）'
+                'message': f'可信主机登录白名单已启用（{len(enabled_hosts)} 台可信主机）'
             }
         else:
             return {
                 'pass': False,
                 'warn': True,
-                'message': '未配置可信主机，所有主机均可发送日志（建议配置可信主机白名单）'
+                'message': '未配置可信主机，所有IP均可登录管理界面（建议配置可信主机白名单）'
             }
     except Exception as e:
         return {
