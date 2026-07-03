@@ -1305,6 +1305,7 @@
                 <div class="tab active" onclick="switchTab('logs')">📋 日志列表</div>
                 <div class="tab" onclick="switchTab('dashboard')">📊 统计面板</div>
                 <div class="tab" onclick="switchTab('live')">📡 实时监控</div>
+                <div class="tab" onclick="switchTab('hosts')">🔒 可信主机设备</div>
                 <div class="tab" onclick="switchTab('settings')">⚙️ 设置</div>
             </div>
             
@@ -1428,6 +1429,54 @@
                 </div>
             </div>
 
+            <div class="tab-content" id="tab-hosts">
+                <div class="settings-section">
+                    <h4>🖧 服务器网络接口</h4>
+                    <div class="setting-desc" style="margin-bottom:16px;">自动识别当前服务器的所有网络接口及其IP地址，可快速将接口IP添加到可信主机白名单。</div>
+                    <table class="hosts-table" id="network-interfaces-table">
+                        <thead>
+                            <tr>
+                                <th>接口名称</th>
+                                <th>MAC地址</th>
+                                <th>IPv4地址</th>
+                                <th>IPv6地址</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="network-interfaces-body">
+                            <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="settings-section">
+                    <h4>🔒 可信主机白名单</h4>
+                    <div class="setting-desc" style="margin-bottom:16px;">配置可信主机白名单，仅白名单内的IP可以登录Web管理界面。留空则允许所有IP访问。</div>
+                    <div class="add-host-form">
+                        <input type="text" id="new-host-hostname" placeholder="主机名（可选）" style="width:160px;">
+                        <input type="text" id="new-host-ip" placeholder="IP地址（如 192.168.1.1）" style="width:160px;">
+                        <input type="text" id="new-host-desc" placeholder="描述（可选）" style="width:200px;">
+                        <button class="btn btn-success" onclick="addTrustedHost()">+ 添加</button>
+                    </div>
+                    <table class="hosts-table" id="trusted-hosts-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>主机名</th>
+                                <th>IP地址</th>
+                                <th>描述</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trusted-hosts-body">
+                            <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="tab-content" id="tab-settings">
                 <div class="settings-section">
                     <h4>🕐 时间同步设置</h4>
@@ -1469,32 +1518,6 @@
                     <div class="setting-actions">
                         <button class="btn btn-primary" onclick="saveNetworkSettings()">保存网络设置</button>
                     </div>
-                </div>
-
-                <div class="settings-section">
-                    <h4>🔒 可信主机管理</h4>
-                    <div class="setting-desc" style="margin-bottom:16px;">配置可信主机白名单，仅白名单内的主机可以发送日志。留空则允许所有主机。</div>
-                    <div class="add-host-form">
-                        <input type="text" id="new-host-hostname" placeholder="主机名（可选）" style="width:160px;">
-                        <input type="text" id="new-host-ip" placeholder="IP地址（如 192.168.1.1）" style="width:160px;">
-                        <input type="text" id="new-host-desc" placeholder="描述（可选）" style="width:200px;">
-                        <button class="btn btn-success" onclick="addTrustedHost()">+ 添加</button>
-                    </div>
-                    <table class="hosts-table" id="trusted-hosts-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>主机名</th>
-                                <th>IP地址</th>
-                                <th>描述</th>
-                                <th>状态</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="trusted-hosts-body">
-                            <tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
-                        </tbody>
-                    </table>
                 </div>
 
                 <div class="settings-section">
@@ -2050,9 +2073,13 @@
                 refreshStats();
             }
             
+            if (tab === 'hosts') {
+                loadNetworkInterfaces();
+                loadTrustedHosts();
+            }
+            
             if (tab === 'settings') {
                 loadSettings();
-                loadTrustedHosts();
             }
         }
         
@@ -2737,6 +2764,74 @@
                 resultDiv.innerHTML = html;
             } catch (e) {
                 resultDiv.innerHTML = `<div style="color:#dc2626;">测试失败: ${e.message}</div>`;
+            }
+        }
+
+        async function loadNetworkInterfaces() {
+            try {
+                const res = await fetch('/api/network-interfaces');
+                const interfaces = await res.json();
+                renderNetworkInterfaces(interfaces);
+            } catch (e) {
+                console.error('Failed to load network interfaces:', e);
+                document.getElementById('network-interfaces-body').innerHTML = 
+                    '<tr><td colspan="6" style="text-align:center; padding:24px; color:#dc2626;">加载失败</td></tr>';
+            }
+        }
+
+        function renderNetworkInterfaces(interfaces) {
+            const tbody = document.getElementById('network-interfaces-body');
+            if (interfaces.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#9ca3af;">未检测到网络接口</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = interfaces.map(iface => {
+                const ipv4List = iface.ipv4.map(ip => `<div>${ip.address}${ip.netmask ? ' /' + ip.netmask : ''}</div>`).join('');
+                const ipv6List = iface.ipv6.map(ip => `<div>${ip.address}</div>`).join('');
+                const statusClass = iface.status === 'up' ? 'badge-success' : 'badge-danger';
+                const statusText = iface.status === 'up' ? '运行中' : '未启用';
+                
+                const addButtons = iface.ipv4.map(ip => 
+                    `<button class="btn btn-success btn-sm" onclick="addIPToTrusted('${ip.address}', '${iface.name}')">添加到白名单</button>`
+                ).join('');
+                
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(iface.name)}</strong></td>
+                        <td>${escapeHtml(iface.mac || '-')}</td>
+                        <td style="max-width:200px;">${ipv4List || '-'}</td>
+                        <td style="max-width:200px;">${ipv6List || '-'}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <div class="host-actions">${addButtons}</div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function addIPToTrusted(ipAddress, interfaceName) {
+            try {
+                const res = await fetch('/api/trusted-hosts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        hostname: interfaceName, 
+                        ip_address: ipAddress, 
+                        description: `自动添加 - 接口 ${interfaceName}` 
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(`${ipAddress} 已添加到可信主机白名单`);
+                    loadTrustedHosts();
+                } else {
+                    alert(data.error || '添加失败');
+                }
+            } catch (e) {
+                console.error('Failed to add IP to trusted hosts:', e);
+                alert('添加失败');
             }
         }
 

@@ -806,6 +806,61 @@ def delete_trusted_host_api(host_id):
     success = db.delete_trusted_host(host_id)
     return jsonify({'success': success})
 
+@api_bp.route('/api/network-interfaces', methods=['GET'])
+@login_required
+def get_network_interfaces():
+    import socket
+    import netifaces
+    
+    interfaces = []
+    for iface in netifaces.interfaces():
+        addrs = netifaces.ifaddresses(iface)
+        
+        interface_info = {
+            'name': iface,
+            'ipv4': [],
+            'ipv6': [],
+            'mac': '',
+            'status': 'unknown'
+        }
+        
+        if netifaces.AF_INET in addrs:
+            for addr in addrs[netifaces.AF_INET]:
+                ip = addr.get('addr', '')
+                if ip and ip != '127.0.0.1':
+                    interface_info['ipv4'].append({
+                        'address': ip,
+                        'netmask': addr.get('netmask', ''),
+                        'broadcast': addr.get('broadcast', '')
+                    })
+        
+        if netifaces.AF_INET6 in addrs:
+            for addr in addrs[netifaces.AF_INET6]:
+                ip = addr.get('addr', '')
+                if ip and not ip.startswith('::1'):
+                    interface_info['ipv6'].append({
+                        'address': ip,
+                        'netmask': addr.get('netmask', ''),
+                        'scope': addr.get('scope', '')
+                    })
+        
+        if netifaces.AF_LINK in addrs:
+            for addr in addrs[netifaces.AF_LINK]:
+                interface_info['mac'] = addr.get('addr', '')
+                break
+        
+        if iface.startswith('lo'):
+            interface_info['status'] = 'loopback'
+        elif len(interface_info['ipv4']) > 0:
+            interface_info['status'] = 'up'
+        else:
+            interface_info['status'] = 'down'
+        
+        if interface_info['status'] != 'loopback':
+            interfaces.append(interface_info)
+    
+    return jsonify(interfaces)
+
 @api_bp.route('/api/send-test', methods=['POST'])
 def send_test():
     data = request.get_json()
