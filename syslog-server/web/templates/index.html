@@ -2949,9 +2949,9 @@
                 document.getElementById('alert-email-password').value = data.alert_email_password || '';
                 document.getElementById('alert-webhook-url').value = data.alert_webhook_url || '';
                 
-                document.getElementById('session-timeout').value = data.session_timeout || 3600;
-                document.getElementById('login-max-attempts').value = data.login_max_attempts || 5;
-                document.getElementById('login-ban-duration').value = data.login_ban_duration || 300;
+                document.getElementById('session-timeout').value = (data.session_timeout !== null && data.session_timeout !== undefined) ? data.session_timeout : 3600;
+                document.getElementById('login-max-attempts').value = (data.login_max_attempts !== null && data.login_max_attempts !== undefined) ? data.login_max_attempts : 5;
+                document.getElementById('login-ban-duration').value = (data.login_ban_duration !== null && data.login_ban_duration !== undefined) ? data.login_ban_duration : 300;
 
                 document.getElementById('web-port').value = data.web_port || 5000;
                 document.getElementById('syslog-udp-port').value = data.syslog_udp_port || 5140;
@@ -3320,7 +3320,7 @@
             const loginMaxAttempts = document.getElementById('login-max-attempts').value;
             const loginBanDuration = document.getElementById('login-ban-duration').value;
             
-            if (!sessionTimeout || !loginMaxAttempts || !loginBanDuration) {
+            if (sessionTimeout === '' || loginMaxAttempts === '' || loginBanDuration === '') {
                 alert('请填写所有安全设置字段');
                 return;
             }
