@@ -38,15 +38,19 @@ def login_required(f):
         if 'logged_in' not in session or not session['logged_in']:
             return redirect(url_for('api.login'))
         
-        # 检查 session 超时
+        # 检查 session 超时（滑动过期），timeout <= 0 表示永不过期
         timeout = int(db.get_setting('session_timeout', 3600)) if db else 3600
-        login_time = session.get('login_time', 0)
-        if time.time() - login_time > timeout:
+        last_activity = session.get('last_activity', session.get('login_time', 0))
+        if timeout > 0 and time.time() - last_activity > timeout:
             session.clear()
             return redirect(url_for('api.login'))
         
-        # 更新最后活动时间（可选，用于滑动过期）
+        # 更新最后活动时间（滑动过期）
         session['last_activity'] = time.time()
+        
+        # 强制修改密码
+        if session.get('force_password_change'):
+            return redirect(url_for('api.change_password'))
         
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
@@ -107,13 +111,14 @@ def login():
         ban_duration = int(db.get_setting('login_ban_duration', 300)) if db else 300
         max_attempts = int(db.get_setting('login_max_attempts', 5)) if db else 5
         
+        stored_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD) if db else Config.ADMIN_PASSWORD
+        is_default_password = (stored_password == Config.ADMIN_PASSWORD)
+
         if db and hasattr(db, 'is_ip_banned') and db.is_ip_banned(client_ip, ban_duration):
-            return render_template('login.html', error=f'您的IP ({client_ip}) 因多次登录失败已被临时封禁，请稍后再试')
+            return render_template('login.html', error=f'您的IP ({client_ip}) 因多次登录失败已被临时封禁，请稍后再试', show_default_credentials=is_default_password)
         
         username = request.form.get('username')
         password = request.form.get('password')
-        
-        stored_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD) if db else Config.ADMIN_PASSWORD
         
         if username == Config.ADMIN_USERNAME and password == stored_password:
             # 登录成功，清除失败记录
@@ -123,6 +128,11 @@ def login():
             session['username'] = username
             session['login_time'] = time.time()
             _write_system_log('info', 'auth', f'用户 {username} 登录成功', f'登录IP: {client_ip}')
+            # 首次登录（仍使用默认密码），强制修改密码
+            if is_default_password:
+                session['force_password_change'] = True
+                _write_system_log('warning', 'auth', f'用户 {username} 使用默认密码登录，强制修改密码', f'登录IP: {client_ip}')
+                return redirect(url_for('api.change_password'))
             return redirect(url_for('api.index'))
         else:
             # 登录失败，记录失败次数
@@ -132,9 +142,34 @@ def login():
                 attempts = db.get_login_failures(client_ip, ban_duration)
                 if attempts >= max_attempts:
                     _write_system_log('error', 'auth', f'IP {client_ip} 因连续登录失败被封禁', f'失败次数: {attempts}, 封禁时长: {ban_duration}秒')
-                    return render_template('login.html', error=f'您的IP ({client_ip}) 因连续{max_attempts}次登录失败已被封禁{ban_duration}秒')
-            return render_template('login.html', error='用户名或密码错误')
-    return render_template('login.html')
+                    return render_template('login.html', error=f'您的IP ({client_ip}) 因连续{max_attempts}次登录失败已被封禁{ban_duration}秒', show_default_credentials=is_default_password)
+            return render_template('login.html', error='用户名或密码错误', show_default_credentials=is_default_password)
+    stored_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD) if db else Config.ADMIN_PASSWORD
+    is_default_password = (stored_password == Config.ADMIN_PASSWORD)
+    return render_template('login.html', show_default_credentials=is_default_password)
+
+@api_bp.route('/change-password', methods=['GET', 'POST'])
+def change_password():
+    if 'logged_in' not in session or not session['logged_in']:
+        return redirect(url_for('api.login'))
+    if not session.get('force_password_change'):
+        return redirect(url_for('api.index'))
+    if request.method == 'POST':
+        new_password = request.form.get('new_password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        if not new_password or not confirm_password:
+            return render_template('change_password.html', error='请输入新密码')
+        if new_password != confirm_password:
+            return render_template('change_password.html', error='两次输入的密码不一致')
+        if new_password == Config.ADMIN_PASSWORD:
+            return render_template('change_password.html', error='新密码不能与默认密码相同')
+        if db:
+            db.set_setting('admin_password', new_password)
+        username = session.get('username', 'unknown')
+        _write_system_log('info', 'config', f'用户 {username} 修改了管理员密码', None)
+        session.pop('force_password_change', None)
+        return redirect(url_for('api.index'))
+    return render_template('change_password.html')
 
 @api_bp.route('/logout')
 @login_required
@@ -669,7 +704,12 @@ def get_settings():
         'alert_email_recipient': db.get_setting('alert_email_recipient', Config.ALERT_EMAIL_RECIPIENT or ''),
         'alert_email_username': db.get_setting('alert_email_username', Config.ALERT_EMAIL_USERNAME or ''),
         'alert_email_password': db.get_setting('alert_email_password', Config.ALERT_EMAIL_PASSWORD or ''),
-        'alert_webhook_url': db.get_setting('alert_webhook_url', Config.ALERT_WEBHOOK_URL or '')
+        'alert_webhook_url': db.get_setting('alert_webhook_url', Config.ALERT_WEBHOOK_URL or ''),
+        'web_host': db.get_setting('web_host', Config.WEB_HOST),
+        'web_port': int(db.get_setting('web_port', Config.WEB_PORT)),
+        'syslog_host': db.get_setting('syslog_host', Config.SYSLOG_HOST),
+        'syslog_udp_port': int(db.get_setting('syslog_udp_port', Config.SYSLOG_UDP_PORT)),
+        'syslog_tcp_port': int(db.get_setting('syslog_tcp_port', Config.SYSLOG_TCP_PORT))
     })
 
 @api_bp.route('/api/settings', methods=['POST'])
