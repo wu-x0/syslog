@@ -23,6 +23,14 @@ def init_api(database, queue):
     log_queue = queue
     _start_rate_monitor()
 
+def _write_system_log(level, category, message, details=None):
+    try:
+        if db and hasattr(db, 'add_system_log'):
+            db.add_system_log(level, category, message, details,
+                              source_ip=request.remote_addr if request else None)
+    except Exception:
+        pass
+
 def login_required(f):
     def wrapper(*args, **kwargs):
         if not Config.AUTH_ENABLED:
@@ -114,21 +122,42 @@ def login():
             session['logged_in'] = True
             session['username'] = username
             session['login_time'] = time.time()
+            _write_system_log('info', 'auth', f'用户 {username} 登录成功', f'登录IP: {client_ip}')
             return redirect(url_for('api.index'))
         else:
             # 登录失败，记录失败次数
+            _write_system_log('warning', 'auth', f'用户 {username} 登录失败', f'登录IP: {client_ip}')
             if db and hasattr(db, 'record_login_failure'):
                 db.record_login_failure(client_ip)
                 attempts = db.get_login_failures(client_ip, ban_duration)
                 if attempts >= max_attempts:
+                    _write_system_log('error', 'auth', f'IP {client_ip} 因连续登录失败被封禁', f'失败次数: {attempts}, 封禁时长: {ban_duration}秒')
                     return render_template('login.html', error=f'您的IP ({client_ip}) 因连续{max_attempts}次登录失败已被封禁{ban_duration}秒')
             return render_template('login.html', error='用户名或密码错误')
     return render_template('login.html')
 
 @api_bp.route('/logout')
+@login_required
 def logout():
+    username = session.get('username', 'unknown')
+    client_ip = request.remote_addr
+    _write_system_log('info', 'auth', f'用户 {username} 退出登录', f'退出IP: {client_ip}')
     session.clear()
     return redirect(url_for('api.login'))
+
+@api_bp.route('/api/restart', methods=['POST'])
+@login_required
+def restart_server():
+    username = session.get('username', 'unknown')
+    _write_system_log('info', 'system', '用户发起服务重启', f'操作账号: {username}')
+
+    def do_restart():
+        time.sleep(2)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    t = threading.Thread(target=do_restart, daemon=True)
+    t.start()
+    return jsonify({'success': True, 'message': '服务正在重启，请稍后刷新页面'})
 
 @api_bp.route('/api/logs', methods=['GET'])
 def get_logs():
@@ -168,6 +197,26 @@ def get_log(log_id):
     if log:
         return jsonify(log)
     return jsonify({'error': 'Log not found'}), 404
+
+@api_bp.route('/api/system-logs', methods=['GET'])
+@login_required
+def get_system_logs_api():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    level = request.args.get('level')
+    category = request.args.get('category')
+    search = request.args.get('search')
+    order = request.args.get('order', 'desc')
+
+    result = db.get_system_logs(
+        page=page,
+        per_page=per_page,
+        level=level,
+        category=category,
+        search=search,
+        order=order
+    )
+    return jsonify(result)
 
 @api_bp.route('/api/stats', methods=['GET'])
 def get_stats():
@@ -627,46 +676,38 @@ def get_settings():
 @login_required
 def update_settings():
     data = request.get_json() or {}
-    
-    if 'ntp_servers' in data:
-        db.set_setting('ntp_servers', data['ntp_servers'])
-    
-    if 'admin_password' in data:
-        db.set_setting('admin_password', data['admin_password'])
-    
-    if 'session_timeout' in data:
-        db.set_setting('session_timeout', data['session_timeout'])
-    
-    if 'login_max_attempts' in data:
-        db.set_setting('login_max_attempts', data['login_max_attempts'])
-    
-    if 'login_ban_duration' in data:
-        db.set_setting('login_ban_duration', data['login_ban_duration'])
-    
-    if 'alert_email_enabled' in data:
-        db.set_setting('alert_email_enabled', data['alert_email_enabled'])
-    
-    if 'alert_email_smtp_server' in data:
-        db.set_setting('alert_email_smtp_server', data['alert_email_smtp_server'])
-    
-    if 'alert_email_smtp_port' in data:
-        db.set_setting('alert_email_smtp_port', data['alert_email_smtp_port'])
-    
-    if 'alert_email_sender' in data:
-        db.set_setting('alert_email_sender', data['alert_email_sender'])
-    
-    if 'alert_email_recipient' in data:
-        db.set_setting('alert_email_recipient', data['alert_email_recipient'])
-    
-    if 'alert_email_username' in data:
-        db.set_setting('alert_email_username', data['alert_email_username'])
-    
-    if 'alert_email_password' in data:
-        db.set_setting('alert_email_password', data['alert_email_password'])
-    
-    if 'alert_webhook_url' in data:
-        db.set_setting('alert_webhook_url', data['alert_webhook_url'])
-    
+    username = session.get('username', 'unknown')
+
+    config_labels = {
+        'ntp_servers': 'NTP服务器',
+        'admin_password': '管理员密码',
+        'session_timeout': '会话超时',
+        'login_max_attempts': '登录最大尝试次数',
+        'login_ban_duration': '登录封禁时长',
+        'alert_email_enabled': '邮件告警开关',
+        'alert_email_smtp_server': '邮件SMTP服务器',
+        'alert_email_smtp_port': '邮件SMTP端口',
+        'alert_email_sender': '邮件发件人',
+        'alert_email_recipient': '邮件收件人',
+        'alert_email_username': '邮件用户名',
+        'alert_email_password': '邮件密码',
+        'alert_webhook_url': 'Webhook地址',
+        'web_port': 'Web服务端口',
+        'syslog_udp_port': 'Syslog UDP端口',
+        'syslog_tcp_port': 'Syslog TCP端口',
+        'syslog_host': 'Syslog监听地址'
+    }
+
+    changed = []
+    for key, label in config_labels.items():
+        if key in data:
+            db.set_setting(key, data[key])
+            changed.append(label)
+
+    if changed:
+        _write_system_log('info', 'config', f'用户 {username} 修改了系统配置',
+                          f'修改项: {", ".join(changed)}')
+
     return jsonify({'success': True})
 
 @api_bp.route('/api/ntp/test', methods=['POST'])

@@ -107,6 +107,21 @@ class Database:
                 created_at TEXT
             )
         ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS system_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                level TEXT NOT NULL,
+                category TEXT NOT NULL,
+                message TEXT NOT NULL,
+                details TEXT,
+                source_ip TEXT,
+                created_at TEXT NOT NULL
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_system_logs_created_at ON system_logs(created_at)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_system_logs_category ON system_logs(category)')
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_timestamp ON syslogs(timestamp)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_syslogs_severity ON syslogs(severity)')
@@ -642,6 +657,53 @@ class Database:
         max_attempts = int(self.get_setting('login_max_attempts', 5))
         failures = self.get_login_failures(ip_address, ban_duration)
         return failures >= max_attempts
+
+    def add_system_log(self, level, category, message, details=None, source_ip=None):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT INTO system_logs (level, category, message, details, source_ip, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (level, category, message, details, source_ip, now))
+        conn.commit()
+
+    def get_system_logs(self, page=1, per_page=50, level=None, category=None, search=None, order='desc'):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+
+        query = 'SELECT * FROM system_logs WHERE 1=1'
+        params = []
+
+        if level:
+            query += ' AND level = ?'
+            params.append(level)
+        if category:
+            query += ' AND category = ?'
+            params.append(category)
+        if search:
+            query += ' AND (message LIKE ? OR details LIKE ?)'
+            params.extend([f'%{search}%', f'%{search}%'])
+
+        count_query = query.replace('SELECT *', 'SELECT COUNT(*) as count', 1)
+        cursor.execute(count_query, params)
+        total = cursor.fetchone()['count']
+
+        query += f' ORDER BY created_at {order.upper()}, id {order.upper()}'
+        query += ' LIMIT ? OFFSET ?'
+        params.extend([per_page, (page - 1) * per_page])
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        logs = [dict(row) for row in rows]
+
+        return {
+            'logs': logs,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': (total + per_page - 1) // per_page
+        }
 
     def clear_login_failures(self, ip_address):
         conn = self._get_conn()

@@ -78,6 +78,12 @@ def main():
     print(f"  Web 界面:  http://{web_host}:{web_port}")
     print(f"  数据库:    {Config.DATABASE_PATH}")
     print(f"{'='*50}\n")
+
+    try:
+        db.add_system_log('info', 'system', 'Syslog 日志服务器已启动',
+                          f'UDP端口: {syslog_udp_port}, TCP端口: {syslog_tcp_port}, Web端口: {web_port}')
+    except Exception:
+        pass
     
     app.run(
         host=web_host,

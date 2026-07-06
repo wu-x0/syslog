@@ -1364,6 +1364,7 @@
                 <div class="tab active" onclick="switchTab('logs')">📋 日志列表</div>
                 <div class="tab" onclick="switchTab('dashboard')">📊 统计面板</div>
                 <div class="tab" onclick="switchTab('live')">📡 实时监控</div>
+                <div class="tab" onclick="switchTab('system-logs')">📝 系统日志</div>
                 <div class="tab" onclick="switchTab('settings')">⚙️ 设置</div>
             </div>
             
@@ -1713,9 +1714,65 @@
                     </table>
                 </div>
             </div>
+
+            <div class="tab-content" id="tab-system-logs">
+                <div class="toolbar">
+                    <div class="toolbar-left" style="gap:10px; flex-wrap: wrap;">
+                        <div class="search-box">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="system-log-search" placeholder="搜索消息或详情..." onkeyup="handleSystemLogSearch(event)">
+                        </div>
+                        <select id="system-log-level" class="page-select" onchange="loadSystemLogs()">
+                            <option value="">全部级别</option>
+                            <option value="info">信息</option>
+                            <option value="warning">警告</option>
+                            <option value="error">错误</option>
+                        </select>
+                        <select id="system-log-category" class="page-select" onchange="loadSystemLogs()">
+                            <option value="">全部类别</option>
+                            <option value="system">系统</option>
+                            <option value="auth">认证</option>
+                            <option value="config">配置</option>
+                            <option value="operation">操作</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-right">
+                        <select id="system-log-per-page" class="page-select" onchange="loadSystemLogs()">
+                            <option value="25">25 条/页</option>
+                            <option value="50" selected>50 条/页</option>
+                            <option value="100">100 条/页</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="loadSystemLogs()">🔄 刷新</button>
+                    </div>
+                </div>
+
+                <div class="log-table-container">
+                    <table class="log-table" id="system-log-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;">ID</th>
+                                <th style="width:150px;">时间</th>
+                                <th style="width:80px;">级别</th>
+                                <th style="width:80px;">类别</th>
+                                <th style="width:120px;">来源IP</th>
+                                <th>消息</th>
+                                <th style="width:30%;">详情</th>
+                            </tr>
+                        </thead>
+                        <tbody id="system-log-tbody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination">
+                    <div id="system-log-pagination-info">共 0 条日志</div>
+                    <div class="pagination-controls" id="system-log-pagination-controls">
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
-    
+
     <div class="detail-panel" id="detail-panel">
         <div class="detail-header">
             <h3>日志详情</h3>
@@ -1789,6 +1846,11 @@
         let vendors = {};
         let sortOrder = 'desc';
         let sortColumn = 'timestamp';
+
+        let systemLogPage = 1;
+        let systemLogPerPage = 50;
+        let systemLogTotal = 0;
+        let systemLogTotalPages = 0;
         
         const sevColors = [
             '#dc2626', '#dc2626', '#dc2626',
@@ -2178,6 +2240,10 @@
                 loadNetworkInterfaces();
                 loadTrustedHosts();
             }
+
+            if (tab === 'system-logs') {
+                loadSystemLogs();
+            }
         }
 
         function switchSettingsTab(tab) {
@@ -2200,6 +2266,129 @@
         
         async function loadStats() {
             await refreshStats();
+        }
+
+        function getSystemLogLevelColor(level) {
+            const colors = {
+                'info': '#16a34a',
+                'warning': '#ca8a04',
+                'error': '#dc2626'
+            };
+            return colors[level] || '#6b7280';
+        }
+
+        function getSystemLogLevelName(level) {
+            const names = {
+                'info': '信息',
+                'warning': '警告',
+                'error': '错误'
+            };
+            return names[level] || level;
+        }
+
+        function getSystemLogCategoryName(category) {
+            const names = {
+                'system': '系统',
+                'auth': '认证',
+                'config': '配置',
+                'operation': '操作'
+            };
+            return names[category] || category;
+        }
+
+        async function loadSystemLogs() {
+            const level = document.getElementById('system-log-level').value;
+            const category = document.getElementById('system-log-category').value;
+            const search = document.getElementById('system-log-search').value;
+            const perPageEl = document.getElementById('system-log-per-page');
+            systemLogPerPage = perPageEl ? parseInt(perPageEl.value) : 50;
+
+            const params = new URLSearchParams({
+                page: systemLogPage,
+                per_page: systemLogPerPage,
+                order: 'desc'
+            });
+            if (level) params.append('level', level);
+            if (category) params.append('category', category);
+            if (search) params.append('search', search);
+
+            try {
+                const res = await fetch(`/api/system-logs?${params.toString()}`);
+                const data = await res.json();
+                systemLogTotal = data.total || 0;
+                systemLogTotalPages = data.total_pages || 0;
+                renderSystemLogs(data.logs || []);
+                renderSystemLogPagination();
+            } catch (e) {
+                console.error('Failed to load system logs:', e);
+            }
+        }
+
+        function renderSystemLogs(logs) {
+            const tbody = document.getElementById('system-log-tbody');
+            if (!logs.length) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#6b7280; padding:40px;">暂无系统日志</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = logs.map(log => `
+                <tr>
+                    <td>${log.id}</td>
+                    <td>${log.created_at}</td>
+                    <td><span class="severity-badge" style="background:${getSystemLogLevelColor(log.level)}; color:#fff;">${getSystemLogLevelName(log.level)}</span></td>
+                    <td>${getSystemLogCategoryName(log.category)}</td>
+                    <td>${escapeHtml(log.source_ip || '-')}</td>
+                    <td>${escapeHtml(log.message)}</td>
+                    <td style="color:#6b7280; font-size:12px;">${escapeHtml(log.details || '-')}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderSystemLogPagination() {
+            document.getElementById('system-log-pagination-info').textContent =
+                `共 ${systemLogTotal} 条日志，第 ${systemLogPage}/${systemLogTotalPages || 1} 页`;
+
+            const controls = document.getElementById('system-log-pagination-controls');
+            let html = '';
+
+            html += `<button class="page-btn" ${systemLogPage <= 1 ? 'disabled' : ''} onclick="goToSystemLogPage(${systemLogPage - 1})">上一页</button>`;
+
+            let startPage = Math.max(1, systemLogPage - 2);
+            let endPage = Math.min(systemLogTotalPages, systemLogPage + 2);
+
+            if (startPage > 1) {
+                html += `<button class="page-btn" onclick="goToSystemLogPage(1)">1</button>`;
+                if (startPage > 2) {
+                    html += '<span style="padding:0 4px;">...</span>';
+                }
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="page-btn ${i === systemLogPage ? 'active' : ''}" onclick="goToSystemLogPage(${i})">${i}</button>`;
+            }
+
+            if (endPage < systemLogTotalPages) {
+                if (endPage < systemLogTotalPages - 1) {
+                    html += '<span style="padding:0 4px;">...</span>';
+                }
+                html += `<button class="page-btn" onclick="goToSystemLogPage(${systemLogTotalPages})">${systemLogTotalPages}</button>`;
+            }
+
+            html += `<button class="page-btn" ${systemLogPage >= systemLogTotalPages ? 'disabled' : ''} onclick="goToSystemLogPage(${systemLogPage + 1})">下一页</button>`;
+
+            controls.innerHTML = html;
+        }
+
+        function goToSystemLogPage(page) {
+            if (page < 1 || page > systemLogTotalPages || page === systemLogPage) return;
+            systemLogPage = page;
+            loadSystemLogs();
+        }
+
+        function handleSystemLogSearch(e) {
+            if (e.key === 'Enter') {
+                systemLogPage = 1;
+                loadSystemLogs();
+            }
         }
         
         async function refreshStats() {
