@@ -67,6 +67,14 @@ systemctl stop syslog-server 2>/dev/null || true
 echo ""
 echo "[2/6] 获取最新代码..."
 
+# 尝试获取远程版本（即使没有 .git 也尝试）
+REMOTE_VERSION=$(curl -sSL --connect-timeout 10 --max-time 30 "https://raw.githubusercontent.com/wu-x0/syslog/main/syslog-server/config.py" 2>/dev/null | python3 -c "
+import re, sys
+content = sys.stdin.read()
+m = re.search(r\"VERSION\s*=\s*['\\\"]([^'\\\"]+)['\\\"]\", content)
+print(m.group(1) if m else 'unknown')
+" 2>/dev/null || echo "unknown")
+
 if [ -d .git ]; then
     echo "执行 git pull..."
     git fetch origin main
