@@ -1,0 +1,6 @@
+backups/
+
+*.db
+*.db-shm
+*.db-wal
+certs/

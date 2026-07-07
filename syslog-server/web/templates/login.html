@@ -144,13 +144,11 @@
             color: #9ca3af;
         }
 
-        .footer a {
-            color: #3b82f6;
-            text-decoration: none;
-        }
-
-        .footer a:hover {
-            text-decoration: underline;
+        .uptime-info {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 12px;
+            color: #6b7280;
         }
     </style>
 </head>
@@ -179,26 +177,31 @@
         <form method="POST" action="/login">
             <div class="form-group">
                 <label for="username">用户名</label>
-                <input type="text" id="username" name="username" placeholder="admin" required>
+                <input type="text" id="username" name="username" placeholder="请输入用户名" required>
             </div>
             <div class="form-group">
                 <label for="password">密码</label>
-                <input type="password" id="password" name="password" placeholder="syslog@2024" required>
+                <input type="password" id="password" name="password" placeholder="请输入密码" required>
             </div>
             <button type="submit" class="btn btn-primary">登 录</button>
         </form>
 
-        {% if show_default_credentials %}
-        <div class="footer">
-            <span style="color:#16a34a;">首次登录</span><br>
-            默认用户名: <strong>admin</strong><br>
-            默认密码: <strong>syslog@2024</strong>
+        <div class="uptime-info" id="uptime-info">
+            加载系统运行时间...
         </div>
-        {% else %}
+
         <div class="footer">
             Syslog 日志服务器
         </div>
-        {% endif %}
     </div>
+    <script>
+        fetch('/api/system-uptime').then(function(r) { return r.json(); }).then(function(data) {
+            if (data.uptime) {
+                document.getElementById('uptime-info').textContent = '系统运行: ' + data.uptime;
+            }
+        }).catch(function() {
+            document.getElementById('uptime-info').textContent = '';
+        });
+    </script>
 </body>
 </html>
