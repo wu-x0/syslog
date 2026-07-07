@@ -1925,6 +1925,27 @@ function syncServerTime() {
         }
     }).catch(function() {});
 }
+
+var _toastTimer = null;
+function showToast(msg, type) {
+    type = type || 'success';
+    var existing = document.getElementById('toast-msg');
+    if (existing) existing.remove();
+    if (_toastTimer) clearTimeout(_toastTimer);
+    var el = document.createElement('div');
+    el.id = 'toast-msg';
+    el.style.cssText = 'position:fixed;top:80px;right:24px;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:500;z-index:10000;transition:opacity 0.3s;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+    el.style.background = type === 'success' ? '#dcfce7' : '#fee2e2';
+    el.style.color = type === 'success' ? '#166534' : '#dc2626';
+    el.textContent = type === 'success' ? '✅ ' + msg : '❌ ' + msg;
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+    requestAnimationFrame(function() { el.style.opacity = '1'; });
+    _toastTimer = setTimeout(function() {
+        el.style.opacity = '0';
+        setTimeout(function() { if (el.parentNode) el.remove(); }, 300);
+    }, 2000);
+}
         
         function initFilters() {
             const sevSelect = document.getElementById('filter-severity');
@@ -3034,9 +3055,12 @@ function syncServerTime() {
                 });
                 const data = await res.json();
                 if (data.success) {
+                    showToast('NTP 设置已保存');
+                } else {
+                    showToast('保存失败', 'error');
                 }
             } catch (e) {
-                console.error('Failed to save NTP settings:', e);
+                showToast('保存失败: ' + e.message, 'error');
             }
         }
 
@@ -3067,9 +3091,12 @@ function syncServerTime() {
                 });
                 const data = await res.json();
                 if (data.success) {
+                    showToast('告警设置已保存');
+                } else {
+                    showToast('保存失败', 'error');
                 }
             } catch (e) {
-                console.error('Failed to save alert settings:', e);
+                showToast('保存失败: ' + e.message, 'error');
             }
         }
 
@@ -3155,26 +3182,31 @@ function syncServerTime() {
                 return;
             }
             
-            tbody.innerHTML = interfaces.map(iface => {
-                const ipv4List = iface.ipv4.map(ip => `<div>${ip.address}${ip.netmask ? ' /' + ip.netmask : ''}</div>`).join('');
-                const ipv6List = iface.ipv6.map(ip => `<div>${ip.address}</div>`).join('');
-                const statusClass = iface.status === 'up' ? 'badge-success' : 'badge-danger';
-                const statusText = iface.status === 'up' ? '运行中' : '未启用';
-                
-                const modifyButtons = '';
-                
-                return `
-                    <tr>
-                        <td><strong>${escapeHtml(iface.name)}</strong></td>
-                        <td>${escapeHtml(iface.mac || '-')}</td>
-                        <td style="max-width:200px;">${ipv4List || '-'}</td>
-                        <td style="max-width:200px;">${ipv6List || '-'}</td>
-                        <td><span class="badge ${statusClass}">${statusText}</span></td>
-                        <td>
-                            <div class="host-actions">${modifyButtons}</div>
-                        </td>
-                    </tr>
-                `;
+    tbody.innerHTML = interfaces.map(iface => {
+        const ipv4List = iface.ipv4.map(ip => `<div>${ip.address}${ip.netmask ? ' /' + ip.netmask : ''}</div>`).join('');
+        const ipv6List = iface.ipv6.map(ip => `<div>${ip.address}</div>`).join('');
+        const statusClass = iface.status === 'up' ? 'badge-success' : 'badge-danger';
+        const statusText = iface.status === 'up' ? '运行中' : '未启用';
+        const firstIpv4 = iface.ipv4.length > 0 ? iface.ipv4[0].address : '';
+        const netmask = iface.ipv4.length > 0 && iface.ipv4[0].netmask ? iface.ipv4[0].netmask : '255.255.255.0';
+
+        var modifyBtns = '';
+        if (iface.status === 'up' && firstIpv4) {
+            modifyBtns = '<button class="btn btn-secondary btn-sm" onclick="promptEditInterface(\'' + escapeHtml(iface.name) + '\', \'' + firstIpv4 + '\', \'' + netmask + '\')">修改 IP</button>';
+        }
+
+        return `
+            <tr>
+                <td><strong>${escapeHtml(iface.name)}</strong></td>
+                <td>${escapeHtml(iface.mac || '-')}</td>
+                <td style="max-width:200px;">${ipv4List || '-'}</td>
+                <td style="max-width:200px;">${ipv6List || '-'}</td>
+                <td><span class="badge ${statusClass}">${statusText}</span></td>
+                <td>
+                    <div class="host-actions">${modifyBtns}</div>
+                </td>
+            </tr>
+        `;
             }).join('');
         }
 
@@ -3187,11 +3219,23 @@ function syncServerTime() {
                 });
                 const data = await res.json();
                 if (data.success) {
+                    showToast('接口 IP 已修改');
                     loadNetworkInterfaces();
                 } else {
+                    showToast(data.error || '修改失败', 'error');
                 }
             } catch (e) {
-                console.error('Failed to update interface IP:', e);
+                showToast('修改失败: ' + e.message, 'error');
+            }
+        }
+
+        function promptEditInterface(ifaceName, currentIp, netmask) {
+            var newIp = prompt('修改接口 ' + ifaceName + ' 的 IPv4 地址:', currentIp);
+            if (newIp && newIp !== currentIp) {
+                var newNetmask = prompt('子网掩码:', netmask);
+                if (newNetmask) {
+                    updateInterfaceIp(ifaceName, newIp, newNetmask);
+                }
             }
         }
 
@@ -3335,9 +3379,12 @@ function syncServerTime() {
                 if (data.success) {
                     document.getElementById('admin-password').value = '';
                     document.getElementById('admin-password-confirm').value = '';
+                    showToast('密码已修改');
+                } else {
+                    showToast('修改失败', 'error');
                 }
             } catch (e) {
-                console.error('Failed to change password:', e);
+                showToast('修改失败: ' + e.message, 'error');
             }
         }
 
@@ -3362,9 +3409,13 @@ function syncServerTime() {
                 });
                 const data = await res.json();
                 if (data.success) {
+                    showToast('安全设置已保存');
+                    initSessionTimeout(parseInt(sessionTimeout));
+                } else {
+                    showToast('保存失败', 'error');
                 }
             } catch (e) {
-                console.error('Failed to save security settings:', e);
+                showToast('保存失败: ' + e.message, 'error');
             }
         }
 
@@ -3391,9 +3442,12 @@ function syncServerTime() {
                 });
                 const data = await res.json();
                 if (data.success) {
+                    showToast('端口设置已保存，需重启服务生效');
+                } else {
+                    showToast('保存失败', 'error');
                 }
             } catch (e) {
-                console.error('Failed to save port settings:', e);
+                showToast('保存失败: ' + e.message, 'error');
             }
         }
 

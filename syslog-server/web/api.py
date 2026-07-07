@@ -5,8 +5,9 @@ from syslog_server.vendor_detector import get_detector
 import json
 import time
 import os
+import sys
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import deque
 
 api_bp = Blueprint('api', __name__)
@@ -700,7 +701,7 @@ def get_settings():
         'version': Config.VERSION,
         'build_date': Config.BUILD_DATE,
         'system_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'system_timezone': datetime.now().astimezone().tzinfo,
+        'system_timezone': datetime.now().astimezone().tzname(),
         'ntp_servers': db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS)),
         'admin_password': db.get_setting('admin_password', Config.ADMIN_PASSWORD),
         'session_timeout': int(db.get_setting('session_timeout', 3600)),
