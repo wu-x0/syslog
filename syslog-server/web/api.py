@@ -698,6 +698,8 @@ def get_settings():
     return jsonify({
         'version': Config.VERSION,
         'build_date': Config.BUILD_DATE,
+        'system_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'system_timezone': datetime.now().astimezone().tzinfo,
         'ntp_servers': db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS)),
         'admin_password': db.get_setting('admin_password', Config.ADMIN_PASSWORD),
         'session_timeout': int(db.get_setting('session_timeout', 3600)),

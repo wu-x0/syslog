@@ -1203,144 +1203,6 @@
             margin-bottom: 16px;
         }
         
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 200;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal-overlay.open {
-            display: flex;
-        }
-        
-        .modal {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            min-width: 400px;
-            max-width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        
-        .modal h3 {
-            font-size: 18px;
-            margin-bottom: 16px;
-        }
-        
-        .modal-body {
-            margin-bottom: 20px;
-            font-size: 14px;
-            color: #4b5563;
-        }
-        
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-        }
-        
-        .toast-container {
-            position: fixed;
-            top: 24px;
-            right: 24px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            pointer-events: none;
-        }
-        
-        .toast {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: white;
-            border-radius: 10px;
-            padding: 14px 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-            border: 1px solid #e5e7eb;
-            font-size: 14px;
-            color: #1f2937;
-            min-width: 240px;
-            max-width: 420px;
-            animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-            pointer-events: auto;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .toast::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-        }
-        
-        .toast.toast-success::before {
-            background: #22c55e;
-        }
-        
-        .toast.toast-error::before {
-            background: #ef4444;
-        }
-        
-        .toast.toast-warning::before {
-            background: #f59e0b;
-        }
-        
-        .toast.toast-info::before {
-            background: #3b82f6;
-        }
-        
-        .toast-icon {
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-        
-        .toast-close {
-            margin-left: auto;
-            cursor: pointer;
-            font-size: 16px;
-            color: #9ca3af;
-            line-height: 1;
-            padding: 2px;
-        }
-        
-        .toast-close:hover {
-            color: #4b5563;
-        }
-        
-        @keyframes toastSlideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        
-        @keyframes toastSlideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-        }
-        
         .stacked-bar {
             display: flex;
             flex-direction: column;
@@ -1607,6 +1469,14 @@
                     <div class="settings-content active" id="settings-ntp">
                         <h3>🕐 时间同步设置</h3>
                         <div class="settings-section">
+                            <div class="setting-row">
+                                <div class="setting-label">当前系统时间</div>
+                                <div class="setting-value" id="system-time" style="font-weight:600; color:#3b82f6;">加载中...</div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">系统时区</div>
+                                <div class="setting-value" id="system-timezone">加载中...</div>
+                            </div>
                             <div class="setting-row">
                                 <div class="setting-label">NTP 服务器</div>
                                 <input type="text" class="setting-input" id="ntp-servers" placeholder="pool.ntp.org, time.nist.gov">
@@ -1915,91 +1785,7 @@
         </div>
     </div>
     
-    <div class="modal-overlay" id="clear-modal">
-        <div class="modal">
-            <h3>⚠️ 确认清理日志</h3>
-            <div class="modal-body">
-                <p style="margin-bottom:16px;">请选择清理方式：</p>
-                <div style="display:flex; flex-direction:column; gap:10px;">
-                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="clearLogs(7)">
-                        🗑️ 删除 7 天前的日志
-                    </button>
-                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="clearLogs(30)">
-                        🗑️ 删除 30 天前的日志
-                    </button>
-                    <button class="btn btn-danger" style="justify-content:flex-start; padding:12px 16px;" onclick="clearLogs(0)">
-                        💥 清空所有日志
-                    </button>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="hideClearModal()">取消</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal-overlay" id="test-modal">
-        <div class="modal">
-            <h3>📤 发送测试日志</h3>
-            <div class="modal-body">
-                <p style="margin-bottom:16px;">选择要发送的测试日志数量：</p>
-                <div style="display:flex; flex-direction:column; gap:10px;">
-                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="sendTestLogsCount(1)">
-                        📝 发送 1 条日志
-                    </button>
-                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="sendTestLogsCount(10)">
-                        📝 发送 10 条日志
-                    </button>
-                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="sendTestLogsCount(50)">
-                        📝 发送 50 条日志
-                    </button>
-                    <button class="btn btn-secondary" style="justify-content:flex-start; padding:12px 16px;" onclick="sendTestLogsCount(100)">
-                        📝 发送 100 条日志
-                    </button>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="hideTestModal()">取消</button>
-            </div>
-        </div>
-    </div>
-
     <script>
-        function showToast(message, type) {
-            type = type || 'info';
-            const icons = {
-                success: '✓',
-                error: '✕',
-                warning: '!',
-                info: 'ℹ'
-            };
-            const container = document.getElementById('toast-container');
-            if (!container) return;
-            const toast = document.createElement('div');
-            toast.className = 'toast toast-' + type;
-            toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span>' +
-                '<span>' + message + '</span>' +
-                '<span class="toast-close">&times;</span>';
-            container.appendChild(toast);
-            
-            const closeBtn = toast.querySelector('.toast-close');
-            closeBtn.addEventListener('click', function() {
-                toast.style.animation = 'toastSlideOut 0.3s ease forwards';
-                setTimeout(function() {
-                    if (toast.parentNode) toast.parentNode.removeChild(toast);
-                }, 300);
-            });
-            
-            const timer = setTimeout(function() {
-                toast.style.animation = 'toastSlideOut 0.3s ease forwards';
-                setTimeout(function() {
-                    if (toast.parentNode) toast.parentNode.removeChild(toast);
-                }, 300);
-            }, 3000);
-            
-            toast.addEventListener('mouseenter', function() { clearTimeout(timer); });
-        }
-        
         let currentPage = 1;
         let perPage = 50;
         let totalLogs = 0;
@@ -2038,7 +1824,19 @@
             startLiveStream();
             loadFilterOptions();
             loadSettings();
+            setInterval(updateSystemTime, 1000);
         });
+        
+        function updateSystemTime() {
+            const timeEl = document.getElementById('system-time');
+            if (timeEl) {
+                fetch('/api/settings').then(res => res.json()).then(data => {
+                    if (data.system_time) {
+                        timeEl.textContent = data.system_time;
+                    }
+                }).catch(() => {});
+            }
+        }
         
         function initFilters() {
             const sevSelect = document.getElementById('filter-severity');
@@ -2995,66 +2793,30 @@
             document.getElementById('live-count').textContent = '已接收: 0 条';
         }
         
-        function showTestModal() {
-            document.getElementById('test-modal').classList.add('open');
-        }
-
-        function hideTestModal() {
-            document.getElementById('test-modal').classList.remove('open');
-        }
-
-        async function sendTestLogsCount(count) {
-            hideTestModal();
-            try {
-                const res = await fetch('/api/send-test', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ count: count })
-                });
-                const data = await res.json();
-                showToast(`已发送 ${data.sent} 条测试日志`, 'success');
-                loadLogs();
-                refreshStats();
-                loadFilterOptions();
-            } catch (e) {
-                showToast('发送失败: ' + e.message, 'error');
-            }
-        }
-
-        async function sendTestLogs() {
-            showTestModal();
-        }
-        
-        function showClearModal() {
-            document.getElementById('clear-modal').classList.add('open');
-        }
-        
-        function hideClearModal() {
-            document.getElementById('clear-modal').classList.remove('open');
-        }
-        
         async function clearLogs(days) {
-            hideClearModal();
-            
-            let confirmMsg;
-            if (days === 0) {
-                confirmMsg = '确定要清空所有日志吗？此操作不可恢复！';
-            } else {
-                confirmMsg = `确定要删除 ${days} 天前的所有日志吗？`;
-            }
-            
-            if (!confirm(confirmMsg)) return;
-            
             try {
                 const url = days === 0 ? '/api/logs' : `/api/logs?days=${days}`;
                 const res = await fetch(url, { method: 'DELETE' });
                 const data = await res.json();
-                showToast('清理完成', 'success');
                 loadLogs();
                 refreshStats();
                 loadFilterOptions();
             } catch (e) {
-                showToast('清理失败: ' + e.message, 'error');
+            }
+        }
+
+        async function sendTestLogs() {
+            try {
+                const res = await fetch('/api/send-test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ count: 1 })
+                });
+                const data = await res.json();
+                loadLogs();
+                refreshStats();
+                loadFilterOptions();
+            } catch (e) {
             }
         }
         
@@ -3069,6 +2831,8 @@
             try {
                 const res = await fetch('/api/settings');
                 const data = await res.json();
+                document.getElementById('system-time').textContent = data.system_time || '--';
+                document.getElementById('system-timezone').textContent = data.system_timezone || '--';
                 document.getElementById('ntp-servers').value = data.ntp_servers || '';
                 
                 document.getElementById('alert-email-enabled').checked = data.alert_email_enabled || false;
@@ -3114,7 +2878,6 @@
             if (sessionWarningTimer) clearTimeout(sessionWarningTimer);
             
             sessionWarningTimer = setTimeout(function() {
-                showToast('会话即将超时，请继续操作以保持登录', 'warning');
             }, (sessionTimeoutSeconds - 30) * 1000);
             
             sessionTimeoutTimer = setTimeout(function() {
@@ -3149,11 +2912,9 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('NTP 设置已保存', 'success');
                 }
             } catch (e) {
                 console.error('Failed to save NTP settings:', e);
-                showToast('保存失败', 'error');
             }
         }
 
@@ -3184,11 +2945,9 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('告警设置已保存', 'success');
                 }
             } catch (e) {
                 console.error('Failed to save alert settings:', e);
-                showToast('保存失败', 'error');
             }
         }
 
@@ -3280,9 +3039,7 @@
                 const statusClass = iface.status === 'up' ? 'badge-success' : 'badge-danger';
                 const statusText = iface.status === 'up' ? '运行中' : '未启用';
                 
-                const modifyButtons = iface.ipv4.map(ip => 
-                    `<button class="btn btn-primary btn-sm" onclick="editInterface('${iface.name}', '${ip.address}', '${ip.netmask || ''}')">修改</button>`
-                ).join('');
+                const modifyButtons = '';
                 
                 return `
                     <tr>
@@ -3299,20 +3056,6 @@
             }).join('');
         }
 
-        function editInterface(ifaceName, currentIp, currentNetmask) {
-            const newIp = prompt(`修改接口 ${ifaceName} 的 IP 地址:`, currentIp);
-            if (!newIp || newIp === currentIp) return;
-            
-            const newNetmask = prompt('子网掩码 (如 255.255.255.0):', currentNetmask || '255.255.255.0');
-            if (!newNetmask) return;
-            
-            if (!confirm(`确定将 ${ifaceName} 的 IP 从 ${currentIp} 修改为 ${newIp}/${newNetmask} 吗?\n\n注意：此操作需要 root 权限，且当前仅临时生效，重启后需重新配置。`)) {
-                return;
-            }
-            
-            updateInterfaceIp(ifaceName, newIp, newNetmask);
-        }
-
         async function updateInterfaceIp(ifaceName, ipAddress, netmask) {
             try {
                 const res = await fetch('/api/network-interfaces', {
@@ -3322,14 +3065,11 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('接口 IP 修改成功', 'success');
                     loadNetworkInterfaces();
                 } else {
-                    showToast(data.error || '修改失败', 'error');
                 }
             } catch (e) {
                 console.error('Failed to update interface IP:', e);
-                showToast('修改失败', 'error');
             }
         }
 
@@ -3346,14 +3086,11 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast(`${ipAddress} 已添加到可信主机白名单`, 'success');
                     loadTrustedHosts();
                 } else {
-                    showToast(data.error || '添加失败', 'error');
                 }
             } catch (e) {
                 console.error('Failed to add IP to trusted hosts:', e);
-                showToast('添加失败', 'error');
             }
         }
 
@@ -3404,7 +3141,6 @@
             const description = document.getElementById('new-host-desc').value.trim();
             
             if (!hostname && !ipAddress) {
-                showToast('主机名和IP地址至少填写一项', 'warning');
                 return;
             }
             
@@ -3421,11 +3157,9 @@
                     document.getElementById('new-host-desc').value = '';
                     loadTrustedHosts();
                 } else {
-                    showToast(data.error || '添加失败', 'error');
                 }
             } catch (e) {
                 console.error('Failed to add trusted host:', e);
-                showToast('添加失败', 'error');
             }
         }
 
@@ -3443,7 +3177,6 @@
         }
 
         async function deleteHost(id) {
-            if (!confirm('确定要删除这个可信主机吗？')) return;
             try {
                 await fetch(`/api/trusted-hosts/${id}`, {
                     method: 'DELETE'
@@ -3451,7 +3184,6 @@
                 loadTrustedHosts();
             } catch (e) {
                 console.error('Failed to delete host:', e);
-                showToast('删除失败', 'error');
             }
         }
 
@@ -3460,17 +3192,14 @@
             const pwd2 = document.getElementById('admin-password-confirm').value;
             
             if (!pwd1 || !pwd2) {
-                showToast('请输入新密码和确认密码', 'warning');
                 return;
             }
             
             if (pwd1 !== pwd2) {
-                showToast('两次输入的密码不一致', 'warning');
                 return;
             }
             
             if (pwd1.length < 6) {
-                showToast('密码长度至少6位', 'warning');
                 return;
             }
             
@@ -3484,11 +3213,9 @@
                 if (data.success) {
                     document.getElementById('admin-password').value = '';
                     document.getElementById('admin-password-confirm').value = '';
-                    showToast('密码修改成功', 'success');
                 }
             } catch (e) {
                 console.error('Failed to change password:', e);
-                showToast('密码修改失败', 'error');
             }
         }
 
@@ -3498,7 +3225,6 @@
             const loginBanDuration = document.getElementById('login-ban-duration').value;
             
             if (sessionTimeout === '' || loginMaxAttempts === '' || loginBanDuration === '') {
-                showToast('请填写所有安全设置字段', 'warning');
                 return;
             }
             
@@ -3514,11 +3240,9 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('安全设置已保存', 'success');
                 }
             } catch (e) {
                 console.error('Failed to save security settings:', e);
-                showToast('保存失败', 'error');
             }
         }
 
@@ -3529,7 +3253,6 @@
             const syslogHost = document.getElementById('syslog-host').value;
 
             if (!webPort || !syslogUdpPort || !syslogTcpPort || !syslogHost) {
-                showToast('请填写所有端口设置字段', 'warning');
                 return;
             }
 
@@ -3546,38 +3269,29 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('端口设置已保存，请重启服务使设置生效！', 'success');
                 }
             } catch (e) {
                 console.error('Failed to save port settings:', e);
-                showToast('保存失败', 'error');
             }
         }
 
         async function restartService() {
-            if (!confirm('确定要重启服务吗？重启后 Web 界面将暂时不可访问，请稍后刷新页面。')) {
-                return;
-            }
-
             try {
                 const res = await fetch('/api/restart', {
                     method: 'POST'
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('服务正在重启，请等待 5 秒后刷新页面...', 'success');
                     setTimeout(() => {
                         window.location.reload();
                     }, 5000);
                 }
             } catch (e) {
                 console.error('Failed to restart service:', e);
-                showToast('重启失败', 'error');
             }
         }
 
         async function logout() {
-            if (!confirm('确定要退出登录吗？')) return;
             try {
                 await fetch('/logout');
                 window.location.href = '/login';
@@ -3632,7 +3346,6 @@
             const metric = document.getElementById('new-route-metric').value.trim();
             
             if (!destination || !gateway) {
-                showToast('请输入目标网络和网关地址', 'warning');
                 return;
             }
             
@@ -3653,11 +3366,9 @@
                     document.getElementById('new-route-metric').value = '';
                     loadStaticRoutes();
                 } else {
-                    showToast(data.error || '添加失败', 'error');
                 }
             } catch (e) {
                 console.error('Failed to add static route:', e);
-                showToast('添加失败', 'error');
             }
         }
 
@@ -3675,7 +3386,6 @@
         }
 
         async function deleteStaticRoute(id) {
-            if (!confirm('确定要删除这条静态路由吗？')) return;
             try {
                 await fetch(`/api/static-routes/${id}`, {
                     method: 'DELETE'
@@ -3683,11 +3393,9 @@
                 loadStaticRoutes();
             } catch (e) {
                 console.error('Failed to delete static route:', e);
-                showToast('删除失败', 'error');
             }
         }
     </script>
-    <div class="toast-container" id="toast-container"></div>
     <div style="text-align:center; padding:20px 0; font-size:12px; color:#9ca3af; border-top:1px solid #e5e7eb; margin-top:20px;">
         Syslog 日志服务器 <span id="app-version">-</span>
         <span style="margin:0 8px;">|</span>
