@@ -3,16 +3,16 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class Config:
-    VERSION = '1.1.2'
+    VERSION = '1.2.0'
     BUILD_DATE = '2026-07-07'
-    SYSLOG_UDP_PORT = 5140
-    SYSLOG_TCP_PORT = 5140
+    SYSLOG_UDP_PORT = 514
+    SYSLOG_TCP_PORT = 514
     SYSLOG_HOST = '0.0.0.0'
     
     DATABASE_PATH = os.path.join(BASE_DIR, 'syslog.db')
     
     WEB_HOST = '0.0.0.0'
-    WEB_PORT = 5000
+    WEB_PORT = 443
     DEBUG = False
     
     LOG_QUEUE_MAXSIZE = 10000
