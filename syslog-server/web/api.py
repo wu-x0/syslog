@@ -38,15 +38,14 @@ def login_required(f):
         if 'logged_in' not in session or not session['logged_in']:
             return redirect(url_for('api.login'))
         
-        # 检查 session 超时（滑动过期），timeout <= 0 表示永不过期
+        # 检查 session 超时（固定过期），timeout <= 0 表示永不过期
+        # 用户需求：长时间未操作就退出，从登录时间算起
         timeout = int(db.get_setting('session_timeout', 3600)) if db else 3600
-        last_activity = session.get('last_activity', session.get('login_time', 0))
-        if timeout > 0 and time.time() - last_activity > timeout:
+        login_time = session.get('login_time', 0)
+        if timeout > 0 and time.time() - login_time > timeout:
+            _write_system_log('info', 'auth', f'用户 {session.get("username", "unknown")} 因会话超时被登出', f'登录时长: {int(time.time() - login_time)}秒, 超时设置: {timeout}秒')
             session.clear()
             return redirect(url_for('api.login'))
-        
-        # 更新最后活动时间（滑动过期）
-        session['last_activity'] = time.time()
         
         # 强制修改密码
         if session.get('force_password_change'):
