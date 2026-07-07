@@ -2957,6 +2957,13 @@
                 document.getElementById('syslog-udp-port').value = data.syslog_udp_port || 5140;
                 document.getElementById('syslog-tcp-port').value = data.syslog_tcp_port || 5140;
                 document.getElementById('syslog-host').value = data.syslog_host || '0.0.0.0';
+                
+                if (data.version) {
+                    document.getElementById('app-version').textContent = 'v' + data.version;
+                }
+                if (data.build_date) {
+                    document.getElementById('app-build-date').textContent = data.build_date;
+                }
             } catch (e) {
                 console.error('Failed to load settings:', e);
             }
@@ -3510,5 +3517,10 @@
             }
         }
     </script>
+    <div style="text-align:center; padding:20px 0; font-size:12px; color:#9ca3af; border-top:1px solid #e5e7eb; margin-top:20px;">
+        Syslog 日志服务器 <span id="app-version">-</span>
+        <span style="margin:0 8px;">|</span>
+        构建日期 <span id="app-build-date">-</span>
+    </div>
 </body>
 </html>
