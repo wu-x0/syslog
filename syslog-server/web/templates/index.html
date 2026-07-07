@@ -1515,6 +1515,7 @@
                 <div class="settings-sidebar">
                     <div class="settings-nav">
                         <div class="settings-nav-item active" onclick="switchSettingsTab('ntp')">🕐 时间同步</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('system')">💻 系统信息</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('interfaces')">🖧 物理接口</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('network')">🌐 静态路由</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('alert')">📧 邮件告警</div>
@@ -1549,6 +1550,56 @@
                                 <button class="btn btn-secondary" onclick="testNtp()">测试连接</button>
                             </div>
                             <div id="ntp-result" class="ntp-result" style="display:none;"></div>
+                        </div>
+                    </div>
+
+                    <div class="settings-content" id="settings-system">
+                        <h3>💻 系统信息</h3>
+                        <div class="settings-section">
+                            <div class="setting-row">
+                                <div class="setting-label">软件版本</div>
+                                <div class="setting-value" id="info-version" style="font-weight:600; color:#3b82f6;">-</div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">构建日期</div>
+                                <div class="setting-value" id="info-build-date">-</div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">数据库路径</div>
+                                <div class="setting-value" id="info-db-path" style="font-size:12px; word-break:break-all;">-</div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">证书状态</div>
+                                <div class="setting-value" id="info-cert-status">-</div>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <h4>🔌 服务端口配置</h4>
+                            <div class="setting-desc" style="margin-bottom:16px;">修改服务端口后需重启服务才能生效。</div>
+                            <div class="setting-row">
+                                <div class="setting-label">Web 管理端口</div>
+                                <input type="number" class="setting-input" id="web-port" placeholder="443">
+                            </div>
+                            <div class="setting-desc" style="margin-bottom:12px;">Web 管理界面监听端口（默认 443，HTTPS）</div>
+                            <div class="setting-row">
+                                <div class="setting-label">Syslog UDP 端口</div>
+                                <input type="number" class="setting-input" id="syslog-udp-port" placeholder="514">
+                            </div>
+                            <div class="setting-desc" style="margin-bottom:12px;">Syslog UDP 接收端口（默认 514）</div>
+                            <div class="setting-row">
+                                <div class="setting-label">Syslog TCP 端口</div>
+                                <input type="number" class="setting-input" id="syslog-tcp-port" placeholder="514">
+                            </div>
+                            <div class="setting-desc" style="margin-bottom:12px;">Syslog TCP 接收端口（默认 514）</div>
+                            <div class="setting-row">
+                                <div class="setting-label">Syslog 监听地址</div>
+                                <input type="text" class="setting-input" id="syslog-host" placeholder="0.0.0.0">
+                            </div>
+                            <div class="setting-desc" style="margin-bottom:12px;">Syslog 服务监听地址（默认 0.0.0.0 表示所有接口）</div>
+                            <div class="setting-actions">
+                                <button class="btn btn-primary" onclick="savePortSettings()">保存端口设置</button>
+                                <button class="btn btn-warning" onclick="restartService()">🔄 重启服务</button>
+                            </div>
                         </div>
                     </div>
 
@@ -1730,35 +1781,6 @@
                             <div class="setting-desc" style="margin-bottom:12px;">登录失败封禁持续时间（默认 300 秒 = 5 分钟）</div>
                             <div class="setting-actions">
                                 <button class="btn btn-primary" onclick="saveSecuritySettings()">保存安全设置</button>
-                            </div>
-                        </div>
-
-                        <div class="settings-section">
-                            <h4>🔧 服务端口配置</h4>
-                            <div class="setting-desc" style="margin-bottom:16px;">修改服务端口后需重启服务才能生效。</div>
-                            <div class="setting-row">
-                                <div class="setting-label">Web 管理端口</div>
-                                <input type="number" class="setting-input" id="web-port" placeholder="5000">
-                            </div>
-                            <div class="setting-desc" style="margin-bottom:12px;">Web 管理界面监听端口（默认 5000）</div>
-                            <div class="setting-row">
-                                <div class="setting-label">Syslog UDP 端口</div>
-                                <input type="number" class="setting-input" id="syslog-udp-port" placeholder="514">
-                            </div>
-                            <div class="setting-desc" style="margin-bottom:12px;">Syslog UDP 接收端口（默认 5140）</div>
-                            <div class="setting-row">
-                                <div class="setting-label">Syslog TCP 端口</div>
-                                <input type="number" class="setting-input" id="syslog-tcp-port" placeholder="514">
-                            </div>
-                            <div class="setting-desc" style="margin-bottom:12px;">Syslog TCP 接收端口（默认 5140）</div>
-                            <div class="setting-row">
-                                <div class="setting-label">Syslog 监听地址</div>
-                                <input type="text" class="setting-input" id="syslog-host" placeholder="0.0.0.0">
-                            </div>
-                            <div class="setting-desc" style="margin-bottom:12px;">Syslog 服务监听地址（默认 0.0.0.0 表示所有接口）</div>
-                            <div class="setting-actions">
-                                <button class="btn btn-primary" onclick="savePortSettings()">保存端口设置</button>
-                                <button class="btn btn-warning" onclick="restartService()">🔄 重启服务</button>
                             </div>
                         </div>
                     </div>
@@ -2364,6 +2386,9 @@ function showToast(msg, type) {
             }
             if (tab === 'ntp') {
                 loadTimezones();
+            }
+            if (tab === 'system') {
+                loadSystemInfo();
             }
         }
         
@@ -3641,6 +3666,38 @@ function showToast(msg, type) {
                 showToast('修改失败: ' + e.message, 'error');
                 document.getElementById('system-timezone-select').value = currentTimezone;
             });
+        }
+
+        async function loadSystemInfo() {
+            try {
+                var res = await fetch('/api/settings');
+                var data = await res.json();
+                document.getElementById('info-version').textContent = 'v' + (data.version || '-');
+                document.getElementById('info-build-date').textContent = data.build_date || '-';
+                document.getElementById('info-db-path').textContent = data.db_path || '-';
+                document.getElementById('web-port').value = data.web_port || 443;
+                document.getElementById('syslog-udp-port').value = data.syslog_udp_port || 514;
+                document.getElementById('syslog-tcp-port').value = data.syslog_tcp_port || 514;
+                document.getElementById('syslog-host').value = data.syslog_host || '0.0.0.0';
+
+                var certStatus = document.getElementById('info-cert-status');
+                if (data.web_port == 443) {
+                    var certRes = await fetch('/api/cert-status');
+                    var certData = await certRes.json();
+                    if (certData.exists) {
+                        certStatus.textContent = '已配置 (' + certData.days_left + ' 天有效)';
+                        certStatus.style.color = '#16a34a';
+                    } else {
+                        certStatus.textContent = '未配置 (将使用 HTTP)';
+                        certStatus.style.color = '#ca8a04';
+                    }
+                } else {
+                    certStatus.textContent = '非 HTTPS 端口';
+                    certStatus.style.color = '#6b7280';
+                }
+            } catch (e) {
+                console.error('Failed to load system info:', e);
+            }
         }
 
         async function loadSystemRoutes() {

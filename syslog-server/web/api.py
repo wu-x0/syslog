@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, render_template, Response, session, redirect, url_for, abort
 from database.db import Database
-from config import Config
+from config import Config, BASE_DIR
 from syslog_server.vendor_detector import get_detector
 import json
 import time
@@ -722,6 +722,7 @@ def get_settings():
     return jsonify({
         'version': Config.VERSION,
         'build_date': Config.BUILD_DATE,
+        'db_path': Config.DATABASE_PATH,
         'system_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'system_timezone': _get_system_timezone(),
         'ntp_servers': db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS)),
@@ -1251,3 +1252,27 @@ def get_system_routes():
         return jsonify({'routes': routes})
     except Exception as e:
         return jsonify({'routes': [], 'error': str(e)})
+
+@api_bp.route('/api/cert-status', methods=['GET'])
+@login_required
+def get_cert_status():
+    cert_file = os.path.join(BASE_DIR, 'certs', 'cert.pem')
+    key_file = os.path.join(BASE_DIR, 'certs', 'key.pem')
+
+    if not os.path.exists(cert_file) or not os.path.exists(key_file):
+        return jsonify({'exists': False})
+
+    try:
+        import ssl
+        from datetime import datetime
+        cert_dict = ssl._ssl._test_decode_cert(cert_file)
+        not_after = None
+        for ext in cert_dict.get('subject', []):
+            for attr in ext:
+                if attr[0] == 'notAfter':
+                    not_after = datetime.strptime(attr[1], '%b %d %H:%M:%S %Y %Z')
+                    break
+        days_left = (not_after - datetime.now()).days if not_after else 0
+        return jsonify({'exists': True, 'days_left': days_left})
+    except Exception:
+        return jsonify({'exists': True, 'days_left': 0})
