@@ -1,84 +1,65 @@
 #!/bin/bash
-
-# Syslog Server 部署脚本
-# 用法: sudo ./deploy.sh
-
 set -e
 
-# 检查是否为 root 用户
-if [ "$EUID" -ne 0 ]; then
-    echo "请使用 root 用户或 sudo 运行此脚本"
-    exit 1
+echo "======================================"
+echo "  Syslog 日志服务器 一键部署脚本"
+echo "======================================"
+
+echo ""
+echo "[1/5] 更新系统并安装依赖..."
+apt-get update && apt-get install -y python3 python3-pip python3-venv git
+
+echo ""
+echo "[2/5] 创建项目目录..."
+mkdir -p /opt/syslog-server
+cd /opt/syslog-server
+
+echo ""
+echo "[3/5] 创建虚拟环境并安装依赖..."
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install flask requests
+
+echo ""
+echo "[4/5] 下载项目代码..."
+if [ -d .git ]; then
+    git pull origin main
+else
+    git clone https://github.com/hushishuai/syslog-server.git .
 fi
 
-# 配置变量
-INSTALL_DIR="/opt/syslog-server"
-SERVICE_NAME="syslog-server"
-PYTHON_CMD="python3"
+echo ""
+echo "[5/5] 创建 systemd 服务..."
+cat > /etc/systemd/system/syslog-server.service << 'EOF'
+[Unit]
+Description=Syslog Server
+After=network.target
 
-echo "=========================================="
-echo "  Syslog 日志服务器部署脚本"
-echo "=========================================="
+[Service]
+User=root
+WorkingDirectory=/opt/syslog-server
+ExecStart=/opt/syslog-server/venv/bin/python3 app.py
+Restart=always
+RestartSec=5
 
-# 检查 Python 版本
-echo "[1/6] 检查 Python 版本..."
-if ! command -v $PYTHON_CMD &> /dev/null; then
-    echo "错误: 未找到 Python3，请先安装"
-    exit 1
-fi
+[Install]
+WantedBy=multi-user.target
+EOF
 
-PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | awk '{print $2}')
-echo "Python 版本: $PYTHON_VERSION"
-
-# 安装依赖
-echo "[2/6] 安装 Python 依赖..."
-pip3 install flask netifaces ntplib -q
-
-# 创建安装目录
-echo "[3/6] 创建安装目录..."
-mkdir -p $INSTALL_DIR
-
-# 复制项目文件
-echo "[4/6] 复制项目文件..."
-# 如果当前目录就是项目目录，复制所有文件
-CURRENT_DIR=$(dirname "$0")
-if [ "$CURRENT_DIR" != "$INSTALL_DIR" ]; then
-    cp -r "$CURRENT_DIR"/* "$INSTALL_DIR/"
-fi
-
-# 创建数据库目录和备份目录
-mkdir -p "$INSTALL_DIR/backups"
-
-# 初始化数据库
-echo "[5/6] 初始化数据库..."
-cd $INSTALL_DIR
-$PYTHON_CMD -c "from database.db import Database; Database()" 2>/dev/null || true
-
-# 安装 systemd 服务
-echo "[6/6] 安装 systemd 服务..."
-cp "$INSTALL_DIR/syslog-server.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable $SERVICE_NAME
-systemctl start $SERVICE_NAME
+systemctl enable syslog-server
+systemctl start syslog-server
 
 echo ""
-echo "=========================================="
+echo "======================================"
 echo "  部署完成！"
-echo "=========================================="
+echo "======================================"
 echo ""
-echo "服务状态: systemctl status $SERVICE_NAME"
-echo "启动服务: systemctl start $SERVICE_NAME"
-echo "停止服务: systemctl stop $SERVICE_NAME"
-echo "重启服务: systemctl restart $SERVICE_NAME"
-echo "查看日志: journalctl -u $SERVICE_NAME -f"
+echo "服务状态:"
+systemctl status syslog-server --no-pager
 echo ""
 echo "Web 界面: http://<服务器IP>:5000"
-echo "默认用户: admin"
-echo "默认密码: syslog@2024"
+echo "Syslog 端口: 5140 (UDP/TCP)"
 echo ""
-echo "Syslog UDP 端口: 5140"
-echo "Syslog TCP 端口: 5140"
-echo "=========================================="
-
-# 显示服务状态
-systemctl status $SERVICE_NAME --no-pager
+echo "日志查看: journalctl -u syslog-server -f"
