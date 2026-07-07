@@ -3042,9 +3042,48 @@
                 if (data.build_date) {
                     document.getElementById('app-build-date').textContent = data.build_date;
                 }
+                
+                // 设置前端会话超时检测
+                const timeoutSec = (data.session_timeout !== null && data.session_timeout !== undefined) ? parseInt(data.session_timeout) : 3600;
+                initSessionTimeout(timeoutSec);
             } catch (e) {
                 console.error('Failed to load settings:', e);
             }
+        }
+        
+        let sessionTimeoutTimer = null;
+        let sessionWarningTimer = null;
+        let sessionTimeoutSeconds = 0;
+        
+        function resetSessionTimeout() {
+            if (sessionTimeoutSeconds <= 0) return;
+            if (sessionTimeoutTimer) clearTimeout(sessionTimeoutTimer);
+            if (sessionWarningTimer) clearTimeout(sessionWarningTimer);
+            
+            sessionWarningTimer = setTimeout(function() {
+                showToast('会话即将超时，请继续操作以保持登录', 'warning');
+            }, (sessionTimeoutSeconds - 30) * 1000);
+            
+            sessionTimeoutTimer = setTimeout(function() {
+                window.location.href = '/login?timeout=1';
+            }, sessionTimeoutSeconds * 1000);
+        }
+        
+        function initSessionTimeout(seconds) {
+            sessionTimeoutSeconds = seconds;
+            if (seconds <= 0) {
+                if (sessionTimeoutTimer) clearTimeout(sessionTimeoutTimer);
+                if (sessionWarningTimer) clearTimeout(sessionWarningTimer);
+                return;
+            }
+            
+            // 监听用户活动
+            const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+            events.forEach(function(evt) {
+                document.addEventListener(evt, resetSessionTimeout, { passive: true });
+            });
+            
+            resetSessionTimeout();
         }
 
         async function saveNtpSettings() {
