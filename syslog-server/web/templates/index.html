@@ -1894,19 +1894,37 @@
             startLiveStream();
             loadFilterOptions();
             loadSettings();
-            setInterval(updateSystemTime, 1000);
-        });
-        
-        function updateSystemTime() {
-            const timeEl = document.getElementById('system-time');
-            if (timeEl) {
-                fetch('/api/settings').then(res => res.json()).then(data => {
-                    if (data.system_time) {
-                        timeEl.textContent = data.system_time;
-                    }
-                }).catch(() => {});
-            }
+    setInterval(updateSystemTime, 1000);
+    setInterval(syncServerTime, 30000);
+});
+
+var serverTimeOffset = 0;
+
+function updateSystemTime() {
+    var timeEl = document.getElementById('system-time');
+    if (timeEl) {
+        var now = new Date(Date.now() + serverTimeOffset);
+        var pad = function(n) { return n < 10 ? '0' + n : n; };
+        timeEl.textContent = now.getFullYear() + '-' +
+            pad(now.getMonth() + 1) + '-' +
+            pad(now.getDate()) + ' ' +
+            pad(now.getHours()) + ':' +
+            pad(now.getMinutes()) + ':' +
+            pad(now.getSeconds());
+    }
+}
+
+function syncServerTime() {
+    var startTime = Date.now();
+    fetch('/api/settings').then(function(res) { return res.json(); }).then(function(data) {
+        var roundTrip = Date.now() - startTime;
+        if (data.system_time) {
+            var serverTime = new Date(data.system_time.replace(' ', 'T')).getTime();
+            serverTime = serverTime + roundTrip / 2;
+            serverTimeOffset = serverTime - Date.now();
         }
+    }).catch(function() {});
+}
         
         function initFilters() {
             const sevSelect = document.getElementById('filter-severity');
@@ -2901,7 +2919,9 @@
             try {
                 const res = await fetch('/api/settings');
                 const data = await res.json();
-                document.getElementById('system-time').textContent = data.system_time || '--';
+                if (data.system_time) {
+                    serverTimeOffset = new Date(data.system_time.replace(' ', 'T')).getTime() - Date.now();
+                }
                 document.getElementById('system-timezone').textContent = data.system_timezone || '--';
                 document.getElementById('ntp-servers').value = data.ntp_servers || '';
                 
