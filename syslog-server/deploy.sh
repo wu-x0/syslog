@@ -46,7 +46,7 @@ if [ ! -d "venv" ]; then
 fi
 source venv/bin/activate
 pip install --upgrade pip
-pip install flask requests
+pip install flask requests netifaces
 
 echo ""
 echo "[5/6] 创建 systemd 服务..."

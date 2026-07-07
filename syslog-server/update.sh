@@ -46,7 +46,7 @@ else
     source venv/bin/activate
 fi
 pip install --upgrade pip
-pip install flask requests
+pip install flask requests netifaces
 
 echo ""
 echo "[3/4] 重启服务..."
