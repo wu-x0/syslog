@@ -51,7 +51,7 @@ fi
 
 echo ""
 echo "[1/6] 更新系统并安装依赖..."
-apt-get update && apt-get install -y python3 python3-pip python3-venv git openssl
+apt-get update && apt-get install -y python3 python3-pip python3-venv git openssl unzip
 
 echo ""
 echo "[2/6] 创建项目目录..."
@@ -71,11 +71,18 @@ elif [ -d .git ]; then
     fi
     rm -f SECURITY.md LICENSE.txt 2>/dev/null || true
 else
-    echo "从 GitHub 克隆..."
-    git clone https://github.com/wu-x0/syslog.git /tmp/syslog-tmp || {
-        echo "GitHub 访问失败！请手动上传项目文件到 $INSTALL_DIR"
-        exit 1
-    }
+    echo "从 GitHub 下载..."
+    # 尝试 git clone，如果失败则使用 curl 下载 zip
+    if ! git clone --depth 1 https://github.com/wu-x0/syslog.git /tmp/syslog-tmp 2>/dev/null; then
+        echo "Git 克隆失败，尝试下载 zip..."
+        curl -sSL --connect-timeout 30 --max-time 300 -o /tmp/syslog.zip "https://github.com/wu-x0/syslog/archive/refs/heads/main.zip" || {
+            echo "下载失败！请检查网络或手动上传项目文件"
+            exit 1
+        }
+        unzip -q /tmp/syslog.zip -d /tmp/
+        rm -f /tmp/syslog.zip
+        mv /tmp/syslog-main /tmp/syslog-tmp
+    fi
     # 仓库根目录是 /workspace，项目在 syslog-server/ 子目录
     if [ -d "/tmp/syslog-tmp/syslog-server" ]; then
         cp -a /tmp/syslog-tmp/syslog-server/. "$INSTALL_DIR/"
