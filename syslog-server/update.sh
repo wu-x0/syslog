@@ -98,7 +98,7 @@ else
     source venv/bin/activate
 fi
 pip install --upgrade pip --quiet
-pip install flask requests netifaces --quiet
+pip install flask requests netifaces pyopenssl --quiet
 
 echo ""
 echo "[4/6] 清理缓存..."

@@ -51,7 +51,7 @@ fi
 
 echo ""
 echo "[1/6] 更新系统并安装依赖..."
-apt-get update && apt-get install -y python3 python3-pip python3-venv git
+apt-get update && apt-get install -y python3 python3-pip python3-venv git openssl
 
 echo ""
 echo "[2/6] 创建项目目录..."
@@ -93,7 +93,7 @@ if [ ! -d "venv" ]; then
 fi
 source venv/bin/activate
 pip install --upgrade pip
-pip install flask requests netifaces
+pip install flask requests netifaces pyopenssl
 
 echo ""
 echo "[5/6] 创建 systemd 服务..."
@@ -131,11 +131,14 @@ echo ""
 echo "Web 界面: https://\$(hostname -I | awk '{print \$1}'):443"
 echo "Syslog 端口: 514 (UDP/TCP)"
 echo ""
+echo "注意: 使用自签名证书，浏览器会提示不安全，点击「高级」->「继续访问」即可"
+echo ""
 echo "常用命令:"
 echo "  启动: systemctl start syslog-server"
 echo "  停止: systemctl stop syslog-server"
 echo "  重启: systemctl restart syslog-server"
 echo "  状态: systemctl status syslog-server"
 echo "  日志: journalctl -u syslog-server -f"
+echo "  证书: $INSTALL_DIR/certs/cert.pem"
 echo ""
 echo "更新代码: bash $INSTALL_DIR/update.sh"
