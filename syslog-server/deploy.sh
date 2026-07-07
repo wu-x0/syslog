@@ -26,7 +26,7 @@ echo "[4/5] 下载项目代码..."
 if [ -d .git ]; then
     git pull origin main
 else
-    git clone https://github.com/hushishuai/syslog-server.git .
+    git clone https://github.com/wu-x0/syslog.git .
 fi
 
 echo ""
