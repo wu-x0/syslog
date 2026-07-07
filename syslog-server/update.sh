@@ -9,7 +9,46 @@ INSTALL_DIR="/opt/syslog-server"
 cd "$INSTALL_DIR"
 
 echo ""
-echo "[1/4] 获取最新代码..."
+echo "[0/5] 版本检查..."
+
+get_local_version() {
+    if [ -f "config.py" ]; then
+        grep "VERSION" config.py | grep -oP "'[^']+'" | head -1 | tr -d "'"
+    else
+        echo "unknown"
+    fi
+}
+
+get_remote_version() {
+    local remote_config
+    remote_config=$(curl -s "https://raw.githubusercontent.com/wu-x0/syslog/main/syslog-server/config.py" 2>/dev/null)
+    if [ -n "$remote_config" ]; then
+        echo "$remote_config" | grep "VERSION" | grep -oP "'[^']+'" | head -1 | tr -d "'"
+    else
+        echo "unknown"
+    fi
+}
+
+LOCAL_VERSION=$(get_local_version)
+REMOTE_VERSION=$(get_remote_version)
+
+echo "当前版本: v$LOCAL_VERSION"
+echo "最新版本: v$REMOTE_VERSION"
+
+if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ] && [ "$LOCAL_VERSION" != "unknown" ]; then
+    echo ""
+    echo "当前版本已是最新版本！"
+    read -p "是否仍要执行更新？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "已取消更新。"
+        exit 0
+    fi
+else
+    echo "检测到新版本，开始自动更新..."
+fi
+
+echo ""
+echo "[1/5] 获取最新代码..."
 
 if [ -d .git ]; then
     # 已有 git 仓库，直接 pull
@@ -38,7 +77,7 @@ else
 fi
 
 echo ""
-echo "[2/4] 更新 Python 依赖..."
+echo "[2/5] 更新 Python 依赖..."
 if [ -d "venv" ]; then
     source venv/bin/activate
 else
@@ -49,13 +88,18 @@ pip install --upgrade pip
 pip install flask requests netifaces
 
 echo ""
-echo "[3/4] 重启服务..."
+echo "[3/5] 重启服务..."
 systemctl restart syslog-server
 
 echo ""
-echo "[4/4] 验证服务状态..."
+echo "[4/5] 验证服务状态..."
 sleep 2
 systemctl status syslog-server --no-pager | head -15
+
+echo ""
+echo "[5/5] 显示新版本号..."
+NEW_VERSION=$(get_local_version)
+echo "更新后版本: v$NEW_VERSION"
 
 echo ""
 echo "======================================"
