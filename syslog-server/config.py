@@ -3,7 +3,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class Config:
-    VERSION = '1.2.0'
+    VERSION = '1.2.1'
     BUILD_DATE = '2026-07-07'
     SYSLOG_UDP_PORT = 514
     SYSLOG_TCP_PORT = 514
