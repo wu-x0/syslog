@@ -13,7 +13,7 @@ echo "[版本检查]"
 
 get_local_version() {
     if [ -f "config.py" ]; then
-        python3 -c "import sys; sys.path.insert(0, '.'); from config import Config; print(Config.VERSION)" 2>/dev/null || echo "unknown"
+        grep "VERSION" config.py | sed -n "s/.*'\([^']*\)'.*/\1/p" | head -1
     else
         echo "unknown"
     fi
@@ -23,7 +23,7 @@ get_remote_version() {
     local remote_raw
     remote_raw=$(curl -s --connect-timeout 5 "https://raw.githubusercontent.com/wu-x0/syslog/main/syslog-server/config.py" 2>/dev/null)
     if [ -n "$remote_raw" ]; then
-        echo "$remote_raw" | python3 -c "import sys; exec(sys.stdin.read()); print(Config.VERSION)" 2>/dev/null || echo "unknown"
+        echo "$remote_raw" | grep "VERSION" | sed -n "s/.*'\([^']*\)'.*/\1/p" | head -1
     else
         echo "unknown"
     fi
