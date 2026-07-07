@@ -37,20 +37,25 @@ def login_required(f):
             return f(*args, **kwargs)
         if 'logged_in' not in session or not session['logged_in']:
             return redirect(url_for('api.login'))
-        
-        # 检查 session 超时（固定过期），timeout <= 0 表示永不过期
-        # 用户需求：长时间未操作就退出，从登录时间算起
+
+        # 检查 session 超时（滑动过期）：每次操作刷新时间，未操作超过 timeout 就登出
+        # timeout <= 0 表示永不过期
         timeout = int(db.get_setting('session_timeout', 3600)) if db else 3600
-        login_time = session.get('login_time', 0)
-        if timeout > 0 and time.time() - login_time > timeout:
-            _write_system_log('info', 'auth', f'用户 {session.get("username", "unknown")} 因会话超时被登出', f'登录时长: {int(time.time() - login_time)}秒, 超时设置: {timeout}秒')
+        last_activity = session.get('last_activity', 0)
+        if timeout > 0 and time.time() - last_activity > timeout:
+            username = session.get('username', 'unknown')
+            idle_seconds = int(time.time() - last_activity)
+            _write_system_log('info', 'auth', f'用户 {username} 因长时间未操作被登出', f'空闲时长: {idle_seconds}秒, 超时设置: {timeout}秒')
             session.clear()
             return redirect(url_for('api.login'))
-        
+
+        # 每次操作都刷新活动时间
+        session['last_activity'] = time.time()
+
         # 强制修改密码
         if session.get('force_password_change'):
             return redirect(url_for('api.change_password'))
-        
+
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
@@ -125,7 +130,7 @@ def login():
                 db.clear_login_failures(client_ip)
             session['logged_in'] = True
             session['username'] = username
-            session['login_time'] = time.time()
+            session['last_activity'] = time.time()
             _write_system_log('info', 'auth', f'用户 {username} 登录成功', f'登录IP: {client_ip}')
             # 首次登录（仍使用默认密码），强制修改密码
             if is_default_password:
