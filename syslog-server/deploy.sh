@@ -22,11 +22,16 @@ pip install --upgrade pip
 pip install flask requests
 
 echo ""
-echo "[4/5] 下载项目代码..."
-if [ -d .git ]; then
-    git pull origin main
+echo "[4/5] 检查项目代码..."
+if [ -f "app.py" ]; then
+    echo "项目文件已存在，跳过下载"
 else
-    git clone https://github.com/wu-x0/syslog.git .
+    echo "尝试从 GitHub 下载..."
+    if [ -d .git ]; then
+        git pull origin main || echo "GitHub 访问失败，使用本地文件"
+    else
+        git clone https://github.com/wu-x0/syslog.git . || echo "GitHub 访问失败，请确保项目文件已上传"
+    fi
 fi
 
 echo ""
