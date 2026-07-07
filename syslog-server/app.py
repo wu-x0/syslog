@@ -10,7 +10,7 @@ from flask import Flask
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import Config
+from config import Config, BASE_DIR
 from syslog_server.udp_server import UDPSyslogServer
 from syslog_server.tcp_server import TCPSyslogServer
 from database.db import Database, LogWriter
@@ -18,7 +18,7 @@ from web.api import api_bp, init_api
 from backup import start_backup
 from alert import start_alert
 
-CERT_DIR = os.path.join(Config.BASE_DIR, 'certs')
+CERT_DIR = os.path.join(BASE_DIR, 'certs')
 CERT_FILE = os.path.join(CERT_DIR, 'cert.pem')
 KEY_FILE = os.path.join(CERT_DIR, 'key.pem')
 
