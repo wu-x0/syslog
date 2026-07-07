@@ -6,6 +6,48 @@ echo "  Syslog 日志服务器 部署脚本"
 echo "======================================"
 
 INSTALL_DIR="/opt/syslog-server"
+SERVICE_NAME="syslog-server"
+
+echo ""
+echo "[环境检查] 检测旧部署残留..."
+
+HAS_RESIDUE=false
+
+if systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
+    echo "  - 发现已注册的 systemd 服务"
+    HAS_RESIDUE=true
+fi
+
+if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+    echo "  - 发现运行中的旧服务，正在停止..."
+    systemctl stop "$SERVICE_NAME"
+fi
+
+if [ -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+    echo "  - 发现旧的 systemd 服务文件，正在移除..."
+    rm -f "/etc/systemd/system/$SERVICE_NAME.service"
+    systemctl daemon-reload
+    HAS_RESIDUE=true
+fi
+
+if [ -d "$INSTALL_DIR" ]; then
+    echo "  - 发现旧的安装目录，正在清理..."
+    rm -rf "$INSTALL_DIR"
+    HAS_RESIDUE=true
+fi
+
+PIDS=$(pgrep -f "$INSTALL_DIR/app.py" 2>/dev/null || true)
+if [ -n "$PIDS" ]; then
+    echo "  - 发现残留进程，正在终止..."
+    echo "$PIDS" | xargs kill -9 2>/dev/null || true
+    HAS_RESIDUE=true
+fi
+
+if [ "$HAS_RESIDUE" = true ]; then
+    echo "  旧环境清理完成。"
+else
+    echo "  未发现旧部署残留，无需清理。"
+fi
 
 echo ""
 echo "[1/6] 更新系统并安装依赖..."
