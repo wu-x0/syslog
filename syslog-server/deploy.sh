@@ -65,6 +65,11 @@ if [ -f "app.py" ]; then
 elif [ -d .git ]; then
     echo "执行 git pull 更新..."
     git pull origin main || echo "更新失败，使用现有文件"
+    if [ -d "syslog-server" ]; then
+        cp -af syslog-server/. .
+        rm -rf syslog-server
+    fi
+    rm -f SECURITY.md LICENSE.txt 2>/dev/null || true
 else
     echo "从 GitHub 克隆..."
     git clone https://github.com/wu-x0/syslog.git /tmp/syslog-tmp || {

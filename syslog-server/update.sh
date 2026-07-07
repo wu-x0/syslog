@@ -9,21 +9,21 @@ INSTALL_DIR="/opt/syslog-server"
 cd "$INSTALL_DIR"
 
 echo ""
-echo "[0/5] 版本检查..."
+echo "[版本检查]"
 
 get_local_version() {
     if [ -f "config.py" ]; then
-        grep "VERSION" config.py | grep -oP "'[^']+'" | head -1 | tr -d "'"
+        python3 -c "import sys; sys.path.insert(0, '.'); from config import Config; print(Config.VERSION)" 2>/dev/null || echo "unknown"
     else
         echo "unknown"
     fi
 }
 
 get_remote_version() {
-    local remote_config
-    remote_config=$(curl -s "https://raw.githubusercontent.com/wu-x0/syslog/main/syslog-server/config.py" 2>/dev/null)
-    if [ -n "$remote_config" ]; then
-        echo "$remote_config" | grep "VERSION" | grep -oP "'[^']+'" | head -1 | tr -d "'"
+    local remote_raw
+    remote_raw=$(curl -s --connect-timeout 5 "https://raw.githubusercontent.com/wu-x0/syslog/main/syslog-server/config.py" 2>/dev/null)
+    if [ -n "$remote_raw" ]; then
+        echo "$remote_raw" | python3 -c "import sys; exec(sys.stdin.read()); print(Config.VERSION)" 2>/dev/null || echo "unknown"
     else
         echo "unknown"
     fi
@@ -43,32 +43,45 @@ if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ] && [ "$LOCAL_VERSION" != "unknown" ]
         echo "已取消更新。"
         exit 0
     fi
+elif [ "$REMOTE_VERSION" != "unknown" ]; then
+    echo "检测到新版本，开始更新..."
 else
-    echo "检测到新版本，开始自动更新..."
+    echo "无法获取远程版本，继续更新..."
 fi
 
 echo ""
-echo "[1/5] 获取最新代码..."
+echo "[1/6] 停止服务..."
+systemctl stop syslog-server 2>/dev/null || true
+
+echo ""
+echo "[2/6] 获取最新代码..."
 
 if [ -d .git ]; then
-    # 已有 git 仓库，直接 pull
     echo "执行 git pull..."
     git fetch origin main
     git reset --hard origin/main
+
+    # 仓库根目录结构，项目在 syslog-server/ 子目录下
+    # 将子目录内容复制到安装目录
+    if [ -d "syslog-server" ]; then
+        echo "  复制项目文件到安装目录..."
+        cp -af syslog-server/. .
+        rm -rf syslog-server
+    fi
+
+    # 清理仓库根目录多余文件
+    rm -f SECURITY.md LICENSE.txt 2>/dev/null || true
 elif [ -f "app.py" ]; then
-    # 没有 git 仓库但有项目文件，重新克隆并覆盖
     echo "重新从 GitHub 克隆..."
-    git clone https://github.com/wu-x0/syslog.git /tmp/syslog-update-tmp || {
+    git clone --depth 1 https://github.com/wu-x0/syslog.git /tmp/syslog-update-tmp || {
         echo "GitHub 访问失败！请检查网络或手动上传文件"
         exit 1
     }
-    # 仓库根目录是 /workspace，项目在 syslog-server/ 子目录
     if [ -d "/tmp/syslog-update-tmp/syslog-server" ]; then
-        # 保留 venv 和数据库
-        cp -a /tmp/syslog-update-tmp/syslog-server/. "$INSTALL_DIR/"
+        cp -af /tmp/syslog-update-tmp/syslog-server/. "$INSTALL_DIR/"
         cp -a /tmp/syslog-update-tmp/.git "$INSTALL_DIR/" 2>/dev/null || true
     else
-        cp -a /tmp/syslog-update-tmp/. "$INSTALL_DIR/"
+        cp -af /tmp/syslog-update-tmp/. "$INSTALL_DIR/"
     fi
     rm -rf /tmp/syslog-update-tmp
 else
@@ -77,27 +90,31 @@ else
 fi
 
 echo ""
-echo "[2/5] 更新 Python 依赖..."
+echo "[3/6] 更新 Python 依赖..."
 if [ -d "venv" ]; then
     source venv/bin/activate
 else
     python3 -m venv venv
     source venv/bin/activate
 fi
-pip install --upgrade pip
-pip install flask requests netifaces
+pip install --upgrade pip --quiet
+pip install flask requests netifaces --quiet
 
 echo ""
-echo "[3/5] 重启服务..."
-systemctl restart syslog-server
+echo "[4/6] 清理缓存..."
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
 echo ""
-echo "[4/5] 验证服务状态..."
+echo "[5/6] 启动服务..."
+systemctl start syslog-server
+
+echo ""
+echo "[6/6] 验证服务状态..."
 sleep 2
 systemctl status syslog-server --no-pager | head -15
 
 echo ""
-echo "[5/5] 显示新版本号..."
+echo "[版本确认]"
 NEW_VERSION=$(get_local_version)
 echo "更新后版本: v$NEW_VERSION"
 
