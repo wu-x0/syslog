@@ -8,6 +8,28 @@ import os
 import sys
 import threading
 from datetime import datetime, timedelta, timezone
+
+
+def _get_system_timezone():
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['timedatectl', 'show', '-p', 'Timezone', '--value'],
+            capture_output=True, text=True, timeout=5
+        )
+        tz = result.stdout.strip()
+        if tz:
+            return tz
+    except Exception:
+        pass
+    try:
+        with open('/etc/timezone', 'r') as f:
+            tz = f.read().strip()
+            if tz:
+                return tz
+    except Exception:
+        pass
+    return timezone.utc
 from collections import deque
 
 api_bp = Blueprint('api', __name__)
@@ -701,7 +723,7 @@ def get_settings():
         'version': Config.VERSION,
         'build_date': Config.BUILD_DATE,
         'system_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'system_timezone': datetime.now().astimezone().tzname(),
+        'system_timezone': _get_system_timezone(),
         'ntp_servers': db.get_setting('ntp_servers', ','.join(Config.NTP_SERVERS)),
         'admin_password': db.get_setting('admin_password', Config.ADMIN_PASSWORD),
         'session_timeout': int(db.get_setting('session_timeout', 3600)),
@@ -1121,3 +1143,111 @@ def get_config():
         'severity_colors': Config.SEVERITY_COLORS,
         'vendors': vendor_list
     })
+
+@api_bp.route('/api/timezones', methods=['GET'])
+@login_required
+def get_timezones():
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['timedatectl', 'list-timezones'],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            zones = [z for z in result.stdout.strip().split('\n') if z]
+            return jsonify({'timezones': zones})
+    except Exception:
+        pass
+
+    import pytz
+    return jsonify({'timezones': pytz.all_timezones})
+
+@api_bp.route('/api/timezone', methods=['POST'])
+@login_required
+def set_timezone():
+    data = request.get_json() or {}
+    timezone = data.get('timezone', '')
+    if not timezone:
+        return jsonify({'success': False, 'error': '时区不能为空'})
+
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['timedatectl', 'set-timezone', timezone],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            _write_system_log('info', 'config', f'系统时区已修改为 {timezone}')
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'error': result.stderr.strip()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@api_bp.route('/api/system-routes', methods=['GET'])
+@login_required
+def get_system_routes():
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['ip', 'route', 'show'],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode != 0:
+            return jsonify({'routes': [], 'error': result.stderr.strip()})
+
+        routes = []
+        for line in result.stdout.strip().split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            route = {}
+            idx = 0
+            if parts[0] == 'default':
+                route['destination'] = 'default'
+                route['gateway'] = ''
+                route['metric'] = ''
+                idx = 1
+                i = 1
+                while i < len(parts):
+                    if parts[i] == 'via':
+                        route['gateway'] = parts[i + 1] if i + 1 < len(parts) else ''
+                        i += 2
+                    elif parts[i] == 'dev':
+                        route['device'] = parts[i + 1] if i + 1 < len(parts) else ''
+                        i += 2
+                    elif parts[i] == 'metric':
+                        route['metric'] = parts[i + 1] if i + 1 < len(parts) else ''
+                        i += 2
+                    elif parts[i] == 'src':
+                        route['src'] = parts[i + 1] if i + 1 < len(parts) else ''
+                        i += 2
+                    else:
+                        i += 1
+            else:
+                route['destination'] = parts[0] if len(parts) > 0 else ''
+                route['gateway'] = ''
+                route['device'] = ''
+                route['metric'] = ''
+                i = 1
+                while i < len(parts):
+                    if parts[i] == 'via':
+                        route['gateway'] = parts[i + 1] if i + 1 < len(parts) else ''
+                        i += 2
+                    elif parts[i] == 'dev':
+                        route['device'] = parts[i + 1] if i + 1 < len(parts) else ''
+                        i += 2
+                    elif parts[i] == 'metric':
+                        route['metric'] = parts[i + 1] if i + 1 < len(parts) else ''
+                        i += 2
+                    elif parts[i] == 'src':
+                        route['src'] = parts[i + 1] if i + 1 < len(parts) else ''
+                        i += 2
+                    else:
+                        i += 1
+            routes.append(route)
+
+        return jsonify({'routes': routes})
+    except Exception as e:
+        return jsonify({'routes': [], 'error': str(e)})
