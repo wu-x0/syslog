@@ -1102,6 +1102,63 @@
         .close-btn:hover {
             background: #e5e7eb;
         }
+
+        .timeout-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .timeout-overlay.show {
+            display: flex;
+        }
+
+        .timeout-modal {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 420px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .timeout-modal .timeout-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .timeout-modal h3 {
+            font-size: 18px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .timeout-modal p {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .timeout-modal .countdown {
+            font-size: 36px;
+            font-weight: 700;
+            color: #ef4444;
+            margin-bottom: 20px;
+        }
+
+        .timeout-modal .timeout-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
         
         .detail-body {
             padding: 20px;
@@ -1772,6 +1829,19 @@
                     <div class="pagination-controls" id="system-log-pagination-controls">
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="timeout-overlay" id="timeout-overlay">
+        <div class="timeout-modal">
+            <div class="timeout-icon">⏰</div>
+            <h3>会话即将过期</h3>
+            <p>您的登录会话因长时间未操作即将超时退出</p>
+            <div class="countdown" id="timeout-countdown">30</div>
+            <p style="font-size:12px; color:#9ca3af;">秒后自动退出登录</p>
+            <div class="timeout-actions">
+                <button class="btn btn-primary" onclick="extendSession()">继续使用</button>
             </div>
         </div>
     </div>
@@ -2871,18 +2941,50 @@
         let sessionTimeoutTimer = null;
         let sessionWarningTimer = null;
         let sessionTimeoutSeconds = 0;
+        let sessionCountdownTimer = null;
+        let sessionCountdownValue = 0;
         
         function resetSessionTimeout() {
             if (sessionTimeoutSeconds <= 0) return;
             if (sessionTimeoutTimer) clearTimeout(sessionTimeoutTimer);
             if (sessionWarningTimer) clearTimeout(sessionWarningTimer);
+            if (sessionCountdownTimer) clearInterval(sessionCountdownTimer);
+            
+            document.getElementById('timeout-overlay').classList.remove('show');
+            
+            var warningSeconds = Math.min(30, sessionTimeoutSeconds);
             
             sessionWarningTimer = setTimeout(function() {
-            }, (sessionTimeoutSeconds - 30) * 1000);
+                showTimeoutWarning(warningSeconds);
+            }, (sessionTimeoutSeconds - warningSeconds) * 1000);
             
             sessionTimeoutTimer = setTimeout(function() {
                 window.location.href = '/login?timeout=1';
             }, sessionTimeoutSeconds * 1000);
+        }
+
+        function showTimeoutWarning(seconds) {
+            sessionCountdownValue = seconds;
+            document.getElementById('timeout-countdown').textContent = seconds;
+            document.getElementById('timeout-overlay').classList.add('show');
+            
+            sessionCountdownTimer = setInterval(function() {
+                sessionCountdownValue--;
+                document.getElementById('timeout-countdown').textContent = sessionCountdownValue;
+                if (sessionCountdownValue <= 0) {
+                    clearInterval(sessionCountdownTimer);
+                }
+            }, 1000);
+        }
+
+        function extendSession() {
+            document.getElementById('timeout-overlay').classList.remove('show');
+            if (sessionCountdownTimer) clearInterval(sessionCountdownTimer);
+            fetch('/api/settings', { method: 'GET' }).then(function() {
+                resetSessionTimeout();
+            }).catch(function() {
+                resetSessionTimeout();
+            });
         }
         
         function initSessionTimeout(seconds) {

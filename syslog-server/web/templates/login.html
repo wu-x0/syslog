@@ -100,6 +100,18 @@
             gap: 8px;
         }
 
+        .info-message {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
         .btn {
             width: 100%;
             padding: 12px 24px;
@@ -154,6 +166,13 @@
         <div class="error-message">
             <span>❌</span>
             {{ error }}
+        </div>
+        {% endif %}
+
+        {% if timeout %}
+        <div class="info-message">
+            <span>⏰</span>
+            您的会话已超时，请重新登录。
         </div>
         {% endif %}
 

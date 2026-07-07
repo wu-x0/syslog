@@ -150,7 +150,8 @@ def login():
             return render_template('login.html', error='用户名或密码错误', show_default_credentials=is_default_password)
     stored_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD) if db else Config.ADMIN_PASSWORD
     is_default_password = (stored_password == Config.ADMIN_PASSWORD)
-    return render_template('login.html', show_default_credentials=is_default_password)
+    timeout_msg = request.args.get('timeout')
+    return render_template('login.html', show_default_credentials=is_default_password, timeout=timeout_msg)
 
 @api_bp.route('/change-password', methods=['GET', 'POST'])
 def change_password():
