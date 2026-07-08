@@ -783,6 +783,26 @@ def update_settings():
 
     return jsonify({'success': True})
 
+@api_bp.route('/api/banned-ips', methods=['GET'])
+@login_required
+def get_banned_ips():
+    ban_duration = int(db.get_setting('login_ban_duration', Config.LOGIN_BAN_DURATION))
+    banned = db.get_all_banned_ips(ban_duration) if hasattr(db, 'get_all_banned_ips') else []
+    return jsonify({'banned_ips': banned, 'ban_duration': ban_duration})
+
+@api_bp.route('/api/banned-ips/unban', methods=['POST'])
+@login_required
+def unban_ip():
+    data = request.get_json() or {}
+    ip_address = data.get('ip_address', '').strip()
+    if not ip_address:
+        return jsonify({'success': False, 'error': 'IP地址不能为空'}), 400
+    if hasattr(db, 'clear_login_failures'):
+        db.clear_login_failures(ip_address)
+    username = session.get('username', 'unknown')
+    _write_system_log('info', 'security', f'用户 {username} 解封了 IP {ip_address}')
+    return jsonify({'success': True})
+
 @api_bp.route('/api/ntp/test', methods=['POST'])
 @login_required
 def test_ntp():

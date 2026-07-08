@@ -1520,6 +1520,7 @@
                         <div class="settings-nav-item" onclick="switchSettingsTab('network')">🌐 静态路由</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('alert')">📧 邮件告警</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('hosts')">🔒 可信主机</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('security')">🛡 防暴力破解</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('account')">👤 账户设置</div>
                     </div>
                 </div>
@@ -1745,6 +1746,52 @@
                         </div>
                     </div>
 
+                    <div class="settings-content" id="settings-security">
+                        <h3>🛡 防暴力破解</h3>
+                        <div class="settings-section">
+                            <h4>⚙ 封禁策略</h4>
+                            <div class="setting-row">
+                                <div class="setting-label">最大登录失败次数</div>
+                                <input type="number" class="setting-input" id="login-max-attempts" placeholder="5" min="1" max="100">
+                            </div>
+                            <div class="setting-desc" style="margin-bottom:12px;">同一 IP 连续登录失败超过此次数将被临时封禁（默认 5 次）</div>
+                            <div class="setting-row">
+                                <div class="setting-label">封禁时长（秒）</div>
+                                <input type="number" class="setting-input" id="login-ban-duration" placeholder="300" min="60" max="86400">
+                            </div>
+                            <div class="setting-desc" style="margin-bottom:12px;">登录失败封禁持续时间（默认 300 秒 = 5 分钟）</div>
+                            <div class="setting-row">
+                                <div class="setting-label">会话超时时间（秒）</div>
+                                <input type="number" class="setting-input" id="session-timeout" placeholder="3600" min="0" max="86400">
+                            </div>
+                            <div class="setting-desc" style="margin-bottom:12px;">用户无操作超时后自动退出（默认 3600 秒 = 1 小时，设为 0 永不过期）</div>
+                            <div class="setting-actions">
+                                <button class="btn btn-primary" onclick="saveSecuritySettings()">保存策略</button>
+                            </div>
+                        </div>
+
+                        <div class="settings-section">
+                            <h4>🚫 被封禁 IP 列表</h4>
+                            <div class="setting-desc" style="margin-bottom:8px;">当前正在被封禁的 IP 地址列表，可手动解除封禁</div>
+                            <div style="margin-bottom:12px;">
+                                <button class="btn btn-sm" onclick="loadBannedIPs()" style="background:#6b7280; color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">刷新列表</button>
+                            </div>
+                            <table class="data-table" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                        <th>IP 地址</th>
+                                        <th>失败次数</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="banned-ips-body">
+                                    <tr><td colspan="4" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div class="settings-content" id="settings-account">
                         <h3>👤 账户设置</h3>
                         <div class="settings-section">
@@ -1758,29 +1805,6 @@
                             </div>
                             <div class="setting-actions">
                                 <button class="btn btn-primary" onclick="savePassword()">修改密码</button>
-                            </div>
-                        </div>
-
-                        <div class="settings-section">
-                            <h4>🔐 登录安全设置</h4>
-                            <div class="setting-desc" style="margin-bottom:16px;">配置 Web 界面登录安全策略，包括会话超时和登录失败封禁。</div>
-                            <div class="setting-row">
-                                <div class="setting-label">会话超时时间（秒）</div>
-                                <input type="number" class="setting-input" id="session-timeout" placeholder="3600">
-                            </div>
-                            <div class="setting-desc" style="margin-bottom:12px;">用户登录后，超过此时间无操作将自动退出（默认 3600 秒 = 1 小时），设置为 0 表示永不过期</div>
-                            <div class="setting-row">
-                                <div class="setting-label">最大登录失败次数</div>
-                                <input type="number" class="setting-input" id="login-max-attempts" placeholder="5">
-                            </div>
-                            <div class="setting-desc" style="margin-bottom:12px;">同一 IP 连续登录失败超过此次数将被临时封禁（默认 5 次）</div>
-                            <div class="setting-row">
-                                <div class="setting-label">封禁时长（秒）</div>
-                                <input type="number" class="setting-input" id="login-ban-duration" placeholder="300">
-                            </div>
-                            <div class="setting-desc" style="margin-bottom:12px;">登录失败封禁持续时间（默认 300 秒 = 5 分钟）</div>
-                            <div class="setting-actions">
-                                <button class="btn btn-primary" onclick="saveSecuritySettings()">保存安全设置</button>
                             </div>
                         </div>
                     </div>
@@ -2389,6 +2413,9 @@ function showToast(msg, type) {
             }
             if (tab === 'system') {
                 loadSystemInfo();
+            }
+            if (tab === 'security') {
+                loadBannedIPs();
             }
         }
         
@@ -3468,6 +3495,49 @@ function showToast(msg, type) {
                 }
             } catch (e) {
                 showToast('保存失败: ' + e.message, 'error');
+            }
+        }
+
+        async function loadBannedIPs() {
+            const tbody = document.getElementById('banned-ips-body');
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#9ca3af;">加载中...</td></tr>';
+            try {
+                const res = await fetch('/api/banned-ips');
+                const data = await res.json();
+                if (!data.banned_ips || data.banned_ips.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#9ca3af;">当前没有被封禁的 IP</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.banned_ips.map(b => `
+                    <tr>
+                        <td><code style="color:#dc2626;">${escapeHtml(b.ip_address)}</code></td>
+                        <td>${b.count} 次</td>
+                        <td><span style="color:#dc2626; font-weight:600;">已封禁</span></td>
+                        <td><button class="btn btn-sm" onclick="unbanIP('${escapeHtml(b.ip_address)}')" style="background:#16a34a; color:#fff; border:none; padding:4px 12px; border-radius:4px; cursor:pointer;">解封</button></td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#dc2626;">加载失败: ' + e.message + '</td></tr>';
+            }
+        }
+
+        async function unbanIP(ip) {
+            if (!confirm('确定要解除 IP ' + ip + ' 的封禁吗？')) return;
+            try {
+                const res = await fetch('/api/banned-ips/unban', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip_address: ip })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('已解封 IP: ' + ip);
+                    loadBannedIPs();
+                } else {
+                    showToast('解封失败: ' + (data.error || '未知错误'), 'error');
+                }
+            } catch (e) {
+                showToast('解封失败: ' + e.message, 'error');
             }
         }
 
