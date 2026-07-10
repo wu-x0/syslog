@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Syslog 日志服务器</title>
     <style>
         * {
@@ -2184,13 +2185,13 @@ function showToast(msg, type) {
 
             tbody.innerHTML = logs.map(log => {
                 const vendorInfo = vendors[log.vendor] || {};
-                const vendorDisplay = (vendorInfo.icon || '❓') + ' ' + (log.vendor_name || '其他');
+                const vendorDisplay = escapeHtml((vendorInfo.icon || '?') + ' ' + (log.vendor_name || '其他'));
                 return `
                 <tr onclick="showDetail(${log.id})" style="cursor:pointer;">
                     <td style="color:#9ca3af;">#${log.id}</td>
-                    <td class="time-cell">${log.timestamp}</td>
+                    <td class="time-cell">${escapeHtml(log.timestamp)}</td>
                     <td><span class="severity-badge sev-${log.severity}">${getSeverityName(log.severity)}</span></td>
-                    <td class="facility-cell">${log.facility_str}</td>
+                    <td class="facility-cell">${escapeHtml(log.facility_str)}</td>
                     <td class="vendor-cell" style="color:${vendorInfo.color || '#888'}">${vendorDisplay}</td>
                     <td class="host-cell">${escapeHtml(log.hostname || '-')}</td>
                     <td class="app-cell">${escapeHtml(log.app_name || '-')}</td>
@@ -2286,7 +2287,7 @@ function showToast(msg, type) {
                 if (!log) return;
 
                 const vendorInfo = vendors[log.vendor] || {};
-                const vendorDisplay = (vendorInfo.icon || '❓') + ' ' + (log.vendor_name || '其他');
+                const vendorDisplay = escapeHtml((vendorInfo.icon || '?') + ' ' + (log.vendor_name || '其他'));
 
                 document.getElementById('detail-body').innerHTML = `
                     <div class="detail-section">
@@ -2297,11 +2298,11 @@ function showToast(msg, type) {
                         </div>
                         <div class="detail-field">
                             <span class="detail-label">接收时间</span>
-                            <span class="detail-value">${log.received_at}</span>
+                            <span class="detail-value">${escapeHtml(log.received_at)}</span>
                         </div>
                         <div class="detail-field">
                             <span class="detail-label">日志时间</span>
-                            <span class="detail-value">${log.timestamp}</span>
+                            <span class="detail-value">${escapeHtml(log.timestamp)}</span>
                         </div>
                     </div>
 
@@ -2315,7 +2316,7 @@ function showToast(msg, type) {
                         </div>
                         <div class="detail-field">
                             <span class="detail-label">设施</span>
-                            <span class="detail-value">${log.facility_str} (${log.facility})</span>
+                            <span class="detail-value">${escapeHtml(log.facility_str)} (${log.facility})</span>
                         </div>
                         <div class="detail-field">
                             <span class="detail-label">设备厂商</span>
@@ -2659,10 +2660,10 @@ function showToast(msg, type) {
                     <div class="check-item ${statusClass}">
                         <div class="check-header">
                             <span class="check-icon">${icon}</span>
-                            <span class="check-name">${check.name}</span>
+                            <span class="check-name">${escapeHtml(check.name)}</span>
                         </div>
-                        <div class="check-req">要求：${check.requirement}</div>
-                        <div class="check-current">现状：${check.current}</div>
+                        <div class="check-req">要求：${escapeHtml(check.requirement)}</div>
+                        <div class="check-current">现状：${escapeHtml(check.current)}</div>
                     </div>
                 `;
             });
@@ -2775,9 +2776,9 @@ function showToast(msg, type) {
             
             container.innerHTML = data.map((item, i) => {
                 const height = (item.count / max) * 100;
-                const name = item.hostname.length > 10 ? item.hostname.substring(0, 10) + '...' : item.hostname;
+                const name = escapeHtml(item.hostname.length > 10 ? item.hostname.substring(0, 10) + '...' : item.hostname);
                 return `
-                    <div class="bar" title="${item.hostname}: ${item.count}">
+                    <div class="bar" title="${escapeHtml(item.hostname)}: ${item.count}">
                         <div class="bar-fill" style="height:${Math.max(height, 2)}%; background:${pieColors[i % pieColors.length]};"></div>
                         <div class="bar-label">${name}</div>
                     </div>
@@ -2797,9 +2798,9 @@ function showToast(msg, type) {
 
             container.innerHTML = data.map((item, i) => {
                 const height = (item.count / max) * 100;
-                const name = item.app_name.length > 10 ? item.app_name.substring(0, 10) + '...' : item.app_name;
+                const name = escapeHtml(item.app_name.length > 10 ? item.app_name.substring(0, 10) + '...' : item.app_name);
                 return `
-                    <div class="bar" title="${item.app_name}: ${item.count}">
+                    <div class="bar" title="${escapeHtml(item.app_name)}: ${item.count}">
                         <div class="bar-fill" style="height:${Math.max(height, 2)}%; background:${pieColors[i % pieColors.length]};"></div>
                         <div class="bar-label">${name}</div>
                     </div>
@@ -2946,9 +2947,9 @@ function showToast(msg, type) {
             row.style.cursor = 'pointer';
             row.onclick = () => showDetail(log.id);
             row.innerHTML = `
-                <td class="time-cell">${log.received_at}</td>
+                <td class="time-cell">${escapeHtml(log.received_at)}</td>
                 <td><span class="severity-badge sev-${log.severity}">${getSeverityName(log.severity)}</span></td>
-                <td class="facility-cell">${log.facility_str}</td>
+                <td class="facility-cell">${escapeHtml(log.facility_str)}</td>
                 <td class="host-cell">${escapeHtml(log.hostname || '-')}</td>
                 <td class="app-cell">${escapeHtml(log.app_name || '-')}</td>
                 <td class="msg-cell" title="${escapeHtml(log.message)}">${escapeHtml(log.message)}</td>
@@ -3007,7 +3008,17 @@ function showToast(msg, type) {
             } catch (e) {
             }
         }
-        
+
+        const _csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const _origFetch = window.fetch;
+        window.fetch = function(url, options = {}) {
+            if (!options.headers) options.headers = {};
+            if (_csrfToken) {
+                options.headers['X-CSRF-Token'] = _csrfToken;
+            }
+            return _origFetch.call(this, url, options);
+        };
+
         function escapeHtml(text) {
             if (!text) return '';
             const div = document.createElement('div');
@@ -3262,8 +3273,8 @@ function showToast(msg, type) {
             }
             
     tbody.innerHTML = interfaces.map(iface => {
-        const ipv4List = iface.ipv4.map(ip => `<div>${ip.address}${ip.netmask ? ' /' + ip.netmask : ''}</div>`).join('');
-        const ipv6List = iface.ipv6.map(ip => `<div>${ip.address}</div>`).join('');
+        const ipv4List = iface.ipv4.map(ip => `<div>${escapeHtml(ip.address)}${ip.netmask ? ' /' + escapeHtml(ip.netmask) : ''}</div>`).join('');
+        const ipv6List = iface.ipv6.map(ip => `<div>${escapeHtml(ip.address)}</div>`).join('');
         const statusClass = iface.status === 'up' ? 'badge-success' : 'badge-danger';
         const statusText = iface.status === 'up' ? '运行中' : '未启用';
         const firstIpv4 = iface.ipv4.length > 0 ? iface.ipv4[0].address : '';

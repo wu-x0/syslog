@@ -6,8 +6,10 @@ import json
 import time
 import os
 import sys
+import secrets as _secrets
 import threading
 from datetime import datetime, timedelta, timezone
+from passlib.hash import bcrypt
 
 
 def _get_system_timezone():
@@ -35,6 +37,17 @@ from collections import deque
 api_bp = Blueprint('api', __name__)
 db = None
 log_queue = None
+
+def _hash_password(password):
+    return bcrypt.hash(password)
+
+def _verify_password(plain, stored):
+    if stored.startswith('$2b$') or stored.startswith('$2a$'):
+        return bcrypt.verify(plain, stored)
+    return plain == stored
+
+def _is_hashed(stored):
+    return stored.startswith('$2b$') or stored.startswith('$2a$')
 
 _rate_lock = threading.Lock()
 _recent_counts = deque()
@@ -121,13 +134,33 @@ def get_current_rate():
             rate_5min = count_diff / time_diff if time_diff > 0 else 0
         return rate_1min, rate_5min, _total_received
 
+def _generate_csrf_token():
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = _secrets.token_hex(32)
+    return session['_csrf_token']
+
+@api_bp.before_request
+def _csrf_protect():
+    if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
+        if request.path == '/login' and request.method == 'POST':
+            token = request.form.get('_csrf_token', '')
+        elif request.is_json:
+            token = request.headers.get('X-CSRF-Token', '')
+        else:
+            token = request.form.get('_csrf_token', '')
+        if not token or token != session.get('_csrf_token', ''):
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'CSRF token missing or invalid'}), 403
+            return render_template('login.html', error='安全验证失败，请刷新页面后重试'), 403
+
 @api_bp.route('/')
 @login_required
 def index():
     return render_template('index.html',
                          facilities=Config.FACILITY_MAP,
                          severities=Config.SEVERITY_MAP,
-                         severity_colors=Config.SEVERITY_COLORS)
+                         severity_colors=Config.SEVERITY_COLORS,
+                         csrf_token=_generate_csrf_token())
 
 @api_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -139,18 +172,19 @@ def login():
         max_attempts = int(db.get_setting('login_max_attempts', 5)) if db else 5
         
         stored_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD) if db else Config.ADMIN_PASSWORD
-        is_default_password = (stored_password == Config.ADMIN_PASSWORD)
+        is_default_password = (stored_password == Config.ADMIN_PASSWORD or _verify_password(Config.ADMIN_PASSWORD, stored_password))
 
         if db and hasattr(db, 'is_ip_banned') and db.is_ip_banned(client_ip, ban_duration):
-            return render_template('login.html', error=f'您的IP ({client_ip}) 因多次登录失败已被临时封禁，请稍后再试', show_default_credentials=is_default_password)
+            return render_template('login.html', error=f'您的IP ({client_ip}) 因多次登录失败已被临时封禁，请稍后再试', show_default_credentials=is_default_password, csrf_token=_generate_csrf_token())
         
         username = request.form.get('username')
         password = request.form.get('password')
         
-        if username == Config.ADMIN_USERNAME and password == stored_password:
+        if username == Config.ADMIN_USERNAME and _verify_password(password, stored_password):
             # 登录成功，清除失败记录
             if db and hasattr(db, 'clear_login_failures'):
                 db.clear_login_failures(client_ip)
+            session.clear()
             session['logged_in'] = True
             session['username'] = username
             session['last_activity'] = time.time()
@@ -169,12 +203,12 @@ def login():
                 attempts = db.get_login_failures(client_ip, ban_duration)
                 if attempts >= max_attempts:
                     _write_system_log('error', 'auth', f'IP {client_ip} 因连续登录失败被封禁', f'失败次数: {attempts}, 封禁时长: {ban_duration}秒')
-                    return render_template('login.html', error=f'您的IP ({client_ip}) 因连续{max_attempts}次登录失败已被封禁{ban_duration}秒', show_default_credentials=is_default_password)
-            return render_template('login.html', error='用户名或密码错误', show_default_credentials=is_default_password)
+                    return render_template('login.html', error=f'您的IP ({client_ip}) 因连续{max_attempts}次登录失败已被封禁{ban_duration}秒', show_default_credentials=is_default_password, csrf_token=_generate_csrf_token())
+            return render_template('login.html', error='用户名或密码错误', show_default_credentials=is_default_password, csrf_token=_generate_csrf_token())
     stored_password = db.get_setting('admin_password', Config.ADMIN_PASSWORD) if db else Config.ADMIN_PASSWORD
-    is_default_password = (stored_password == Config.ADMIN_PASSWORD)
+    is_default_password = (stored_password == Config.ADMIN_PASSWORD or _verify_password(Config.ADMIN_PASSWORD, stored_password))
     timeout_msg = request.args.get('timeout')
-    return render_template('login.html', show_default_credentials=is_default_password, timeout=timeout_msg)
+    return render_template('login.html', show_default_credentials=is_default_password, timeout=timeout_msg, csrf_token=_generate_csrf_token())
 
 @api_bp.route('/change-password', methods=['GET', 'POST'])
 def change_password():
@@ -189,10 +223,10 @@ def change_password():
             return render_template('change_password.html', error='请输入新密码')
         if new_password != confirm_password:
             return render_template('change_password.html', error='两次输入的密码不一致')
-        if new_password == Config.ADMIN_PASSWORD:
+        if _verify_password(new_password, Config.ADMIN_PASSWORD):
             return render_template('change_password.html', error='新密码不能与默认密码相同')
         if db:
-            db.set_setting('admin_password', new_password)
+            db.set_setting('admin_password', _hash_password(new_password))
         username = session.get('username', 'unknown')
         _write_system_log('info', 'config', f'用户 {username} 修改了管理员密码', None)
         session.pop('force_password_change', None)
@@ -223,6 +257,7 @@ def restart_server():
     return jsonify({'success': True, 'message': '服务正在重启，请稍后刷新页面'})
 
 @api_bp.route('/api/logs', methods=['GET'])
+@login_required
 def get_logs():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
@@ -255,6 +290,7 @@ def get_logs():
     return jsonify(result)
 
 @api_bp.route('/api/logs/<int:log_id>', methods=['GET'])
+@login_required
 def get_log(log_id):
     log = db.get_log_by_id(log_id)
     if log:
@@ -282,6 +318,7 @@ def get_system_logs_api():
     return jsonify(result)
 
 @api_bp.route('/api/stats', methods=['GET'])
+@login_required
 def get_stats():
     hours = request.args.get('hours', 24, type=int)
     stats = db.get_statistics(hours=hours)
@@ -657,17 +694,20 @@ def _check_trusted_hosts():
         }
 
 @api_bp.route('/api/recent', methods=['GET'])
+@login_required
 def get_recent():
     limit = request.args.get('limit', 100, type=int)
     logs = db.get_recent_logs(limit=limit)
     return jsonify(logs)
 
 @api_bp.route('/api/values/<column>', methods=['GET'])
+@login_required
 def get_values(column):
     values = db.get_distinct_values(column)
     return jsonify(values)
 
 @api_bp.route('/api/logs', methods=['DELETE'])
+@login_required
 def delete_logs():
     days = request.args.get('days', type=int)
     if days is not None:
@@ -678,6 +718,7 @@ def delete_logs():
         return jsonify({'deleted': 'all', 'method': 'clear'})
 
 @api_bp.route('/api/stream')
+@login_required
 def stream():
     def event_stream():
         last_id = 0
@@ -770,9 +811,13 @@ def update_settings():
     }
 
     changed = []
+    should_restart = False
     for key, label in config_labels.items():
         if key in data:
-            db.set_setting(key, data[key])
+            val = data[key]
+            if key == 'admin_password' and val:
+                val = _hash_password(val)
+            db.set_setting(key, val)
             changed.append(label)
 
     if changed:
@@ -1101,6 +1146,7 @@ def static_route_api(route_id):
     return jsonify({'success': success})
 
 @api_bp.route('/api/send-test', methods=['POST'])
+@login_required
 def send_test():
     data = request.get_json()
     count = data.get('count', 1) if data else 1
@@ -1149,6 +1195,7 @@ def send_test():
     return jsonify({'sent': sent})
 
 @api_bp.route('/api/config', methods=['GET'])
+@login_required
 def get_config():
     detector = get_detector()
     vendors = detector.get_all_vendors()
