@@ -3,7 +3,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class Config:
-    VERSION = '1.2.4'
+    VERSION = '1.2.5'
     BUILD_DATE = '2026-07-07'
     SYSLOG_UDP_PORT = 514
     SYSLOG_TCP_PORT = 514
@@ -27,7 +27,7 @@ class Config:
 
     AUTH_ENABLED = True
     ADMIN_USERNAME = os.environ.get('SYSLOG_ADMIN_USERNAME', 'admin')
-    ADMIN_PASSWORD = os.environ.get('SYSLOG_ADMIN_PASSWORD', '')
+    ADMIN_PASSWORD = os.environ.get('SYSLOG_ADMIN_PASSWORD') or 'syslog@2024'
     SESSION_SECRET_KEY = os.environ.get('SESSION_SECRET_KEY') or None
     SESSION_TIMEOUT = 3600
     LOGIN_MAX_ATTEMPTS = 5

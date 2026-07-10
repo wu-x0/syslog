@@ -1344,33 +1344,23 @@ def get_cert_status():
 
 @api_bp.route('/api/system-uptime', methods=['GET'])
 def get_system_uptime():
-    import subprocess
     uptime_str = ''
     days = 0
     hours = 0
     minutes = 0
     try:
-        result = subprocess.run(['uptime', '-s'], capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            boot_time = result.stdout.strip()
-            from datetime import datetime
-            boot_dt = datetime.strptime(boot_time, '%Y-%m-%d %H:%M:%S')
-            now = datetime.now()
-            delta = now - boot_dt
-            days = delta.days
-            seconds = delta.seconds
-            hours = seconds // 3600
-            minutes = (seconds % 3600) // 60
-            uptime_str = f'{days}天 {hours}小时 {minutes}分钟'
+        with open('/proc/uptime', 'r') as f:
+            uptime_seconds = float(f.read().split()[0])
+            days = int(uptime_seconds // 86400)
+            hours = int((uptime_seconds % 86400) // 3600)
+            minutes = int((uptime_seconds % 3600) // 60)
+            parts = []
+            if days > 0:
+                parts.append(f'{days}天')
+            if hours > 0:
+                parts.append(f'{hours}小时')
+            parts.append(f'{minutes}分钟')
+            uptime_str = ' '.join(parts)
     except Exception:
-        try:
-            result = subprocess.run(['cat', '/proc/uptime'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                uptime_seconds = float(result.stdout.split()[0])
-                days = int(uptime_seconds // 86400)
-                hours = int((uptime_seconds % 86400) // 3600)
-                minutes = int((uptime_seconds % 3600) // 60)
-                uptime_str = f'{days}天 {hours}小时 {minutes}分钟'
-        except Exception:
-            pass
+        pass
     return jsonify({'uptime': uptime_str, 'days': days, 'hours': hours, 'minutes': minutes})
