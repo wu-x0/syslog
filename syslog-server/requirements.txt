@@ -1,2 +1,7 @@
 Flask>=3.0.0
 pyOpenSSL>=23.0.0
+passlib[bcrypt]>=1.7.4
+# Optional dependencies
+# ntplib - for NTP checks
+# netifaces - for network interface management
+# prometheus_client - for metrics exposure
