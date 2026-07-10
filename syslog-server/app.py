@@ -126,6 +126,9 @@ def create_app():
     app = Flask(__name__, template_folder=template_dir)
     app.config.from_object(Config)
 
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_SECURE'] = True
+
     if getattr(Config, 'SESSION_SECRET_KEY', None):
         app.secret_key = Config.SESSION_SECRET_KEY
     else:
