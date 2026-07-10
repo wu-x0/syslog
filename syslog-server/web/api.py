@@ -151,7 +151,7 @@ def _csrf_protect():
         if not token or token != session.get('_csrf_token', ''):
             if request.path.startswith('/api/'):
                 return jsonify({'error': 'CSRF token missing or invalid'}), 403
-            return render_template('login.html', error='安全验证失败，请刷新页面后重试'), 403
+            return render_template('login.html', error='安全验证失败，请刷新页面后重试', csrf_token=_generate_csrf_token()), 403
 
 @api_bp.route('/')
 @login_required
