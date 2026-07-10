@@ -21,6 +21,22 @@ from web.api import api_bp, init_api
 from backup import start_backup
 from alert import start_alert
 
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+log_file = os.path.join(LOG_DIR, 'syslog-server.log')
+logger = logging.getLogger('syslogserver')
+log_level = logging.DEBUG if getattr(Config, 'DEBUG', False) else logging.INFO
+logger.setLevel(log_level)
+formatter = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(message)s')
+
+handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
+
 # Logging setup
 LOG_DIR = os.path.join(BASE_DIR, 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -110,11 +126,9 @@ def create_app():
     app = Flask(__name__, template_folder=template_dir)
     app.config.from_object(Config)
 
-    # Ensure session secret key is set
     if getattr(Config, 'SESSION_SECRET_KEY', None):
         app.secret_key = Config.SESSION_SECRET_KEY
     else:
-        # Generate an ephemeral session key if none provided, but warn
         generated = secrets.token_urlsafe(32)
         app.secret_key = generated
         logger.warning('SESSION_SECRET_KEY not provided; generated ephemeral key (not persisted). Set SESSION_SECRET_KEY in production!')
