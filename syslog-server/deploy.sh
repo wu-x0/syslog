@@ -94,13 +94,13 @@ else
 fi
 
 echo ""
-echo "[4/6] 创建虚拟环境..."
+echo "[4/6] 安装 Python 依赖..."
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 source venv/bin/activate
 pip install --upgrade pip
-pip install flask requests netifaces pyopenssl
+pip install -r requirements.txt
 
 echo ""
 echo "[5/6] 创建 systemd 服务..."
