@@ -143,7 +143,7 @@ def _generate_csrf_token():
 def _csrf_protect():
     if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
         if request.path == '/login' and request.method == 'POST':
-            token = request.form.get('_csrf_token', '')
+            return
         elif request.is_json:
             token = request.headers.get('X-CSRF-Token', '')
         else:
