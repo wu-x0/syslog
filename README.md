@@ -1,4 +1,4 @@
-# Syslog 日志服务器 v1.2.2
+# Syslog 日志服务器
 
 基于 Python 的轻量级 Syslog 服务器，支持 UDP/TCP 协议接收、Web 管理界面、日志完整性校验和告警通知。
 
